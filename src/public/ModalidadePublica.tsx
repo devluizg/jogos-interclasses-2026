@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, CalendarDays, FileText, MapPin, Ticket, Users } from 'lucide-react'
+import { ArrowLeft, CalendarDays, FileText, MapPin, Users } from 'lucide-react'
 import { useAsync } from '@/lib/useAsync'
 import { supabase } from '@/lib/supabase'
 import { FORMATOS, TIPOS_MODALIDADE } from '@/lib/constantes'
@@ -104,12 +104,6 @@ export default function ModalidadePublica() {
           <Link to="/modalidades" className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-slate-300 hover:text-white">
             <ArrowLeft className="h-3.5 w-3.5" /> Todas as modalidades
           </Link>
-          {modalidade.conta_classificacao_geral ? (
-            <span className="rounded-full bg-brand-500/20 px-3 py-1 font-semibold text-brand-200">Conta na classificação geral</span>
-          ) : null}
-          {modalidade.conta_taca_desempenho ? (
-            <span className="rounded-full bg-ceu-500/20 px-3 py-1 font-semibold text-ceu-200">Conta na Taça</span>
-          ) : null}
         </div>
       </PageHero>
 
@@ -136,30 +130,12 @@ export default function ModalidadePublica() {
                             {formato}
                           </span>
                         </div>
-                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-600">
-                          {cat.tamanho_equipe_min || cat.tamanho_equipe_max ? (
-                            <span className="inline-flex items-center gap-1">
-                              <Users className="h-3.5 w-3.5" />
-                              {cat.tamanho_equipe_min === cat.tamanho_equipe_max
-                                ? `${cat.tamanho_equipe_min} atletas por equipe`
-                                : `${cat.tamanho_equipe_min ?? '?'} a ${cat.tamanho_equipe_max ?? '?'} atletas`}
-                            </span>
-                          ) : null}
-                          {cat.min_participantes_partida ? (
-                            <span className="inline-flex items-center gap-1">
-                              <Ticket className="h-3.5 w-3.5" /> mínimo de {cat.min_participantes_partida} para iniciar
-                            </span>
-                          ) : null}
-                          {cat.vagas_premiadas ? (
-                            <span>{cat.vagas_premiadas} colocações premiadas</span>
-                          ) : null}
-                          {cat.max_equipes_por_turma ? (
-                            <span>até {cat.max_equipes_por_turma} equipe(s) por turma</span>
-                          ) : null}
-                        </div>
-                        {cat.a_confirmar ? (
-                          <p className="mt-2 text-[11px] font-medium text-amber-700">
-                            Regra sujeita à confirmação da organização.
+                        {cat.tamanho_equipe_min || cat.tamanho_equipe_max ? (
+                          <p className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-slate-600">
+                            <Users className="h-3.5 w-3.5" />
+                            {cat.tamanho_equipe_min === cat.tamanho_equipe_max
+                              ? `${cat.tamanho_equipe_min} atletas por equipe`
+                              : `${cat.tamanho_equipe_min ?? '?'} a ${cat.tamanho_equipe_max ?? '?'} atletas`}
                           </p>
                         ) : null}
                       </div>

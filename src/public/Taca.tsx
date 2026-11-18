@@ -46,6 +46,7 @@ export default function Taca() {
   const criterios = dados.data?.criterios ?? []
   const nomesCriterios = new Map(criterios.map((c) => [c.chave, c.nome]))
   const pesos = criterios.filter((c) => c.peso !== null)
+  void pesos
   const incompleto = ranking.some((linha) => !linha.formula_completa)
 
   return (
@@ -53,7 +54,7 @@ export default function Taca() {
       <PageHero
         chapeu="Premiação paralela"
         titulo={nomeTaca}
-        descricao="Uma disputa que vai além do placar: desempenho esportivo, participação, torcida, identificação e conduta."
+        descricao="Desempenho esportivo, participação, torcida, identificação e conduta."
       />
 
       <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
@@ -129,25 +130,6 @@ export default function Taca() {
               <p className="mt-3 text-xs font-medium text-amber-700">
                 A pontuação está em ajuste pela organização.
               </p>
-            ) : null}
-
-            {pesos.length > 0 ? (
-              <Card className="mt-6 p-4">
-                <h2 className="font-display text-xl font-bold uppercase text-noite-900">Como a Taça é calculada</h2>
-                <p className="mt-1 text-sm leading-relaxed text-slate-600">
-                  O desempenho esportivo é normalizado pelo melhor resultado entre as turmas. Os critérios qualitativos usam as médias dos jurados. Descontos de conduta são subtraídos ao final.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {pesos.map((c) => (
-                    <span key={c.chave} className="rounded-lg bg-areia-100 px-2.5 py-1.5 text-xs text-slate-700">
-                      <strong className="font-semibold text-noite-900">{c.nome}</strong> · {c.peso}%
-                      {c.tipo === 'qualitativo' && c.escala_min !== null && c.escala_max !== null
-                        ? ` · escala ${c.escala_min}–${c.escala_max}`
-                        : ''}
-                    </span>
-                  ))}
-                </div>
-              </Card>
             ) : null}
           </>
         )}

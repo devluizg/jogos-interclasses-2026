@@ -3,6 +3,8 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { CalendarDays, MapPin, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { ConfigProvider, cfgBooleano, cfgTexto, useConfig } from './hooks'
+import MobileNav from './MobileNav'
+import PwaAtualizacao from './PwaAtualizacao'
 import { Container } from './ui'
 import { periodoEvento } from './utils'
 
@@ -24,7 +26,7 @@ function RolarAoTopo() {
   return null
 }
 
-function Navegacao({ mobile = false }: { mobile?: boolean }) {
+function Navegacao() {
   const { configs } = useConfig()
   const tacaPublicada = cfgBooleano(configs, 'taca_publicada')
   const links = tacaPublicada ? [...LINKS, { para: '/taca', rotulo: 'Taça' }] : LINKS
@@ -32,11 +34,7 @@ function Navegacao({ mobile = false }: { mobile?: boolean }) {
   return (
     <nav
       aria-label="Navegação principal"
-      className={cn(
-        mobile
-          ? 'flex gap-1 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
-          : 'hidden items-center gap-0.5 lg:flex',
-      )}
+      className="hidden items-center gap-0.5 lg:flex"
     >
       {links.map((link) => (
         <NavLink
@@ -45,11 +43,8 @@ function Navegacao({ mobile = false }: { mobile?: boolean }) {
           end={'fim' in link ? link.fim : false}
           className={({ isActive }) =>
             cn(
-              'whitespace-nowrap rounded-lg font-semibold transition-colors',
-              mobile ? 'border border-noite-900/10 bg-white px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-[13px]',
-              isActive
-                ? 'bg-noite-900 text-white'
-                : 'text-noite-800 hover:bg-noite-900/5',
+              'whitespace-nowrap rounded-lg px-3 py-2 text-[13px] font-semibold transition-colors',
+              isActive ? 'bg-noite-900 text-white' : 'text-noite-800 hover:bg-noite-900/5',
             )
           }
         >
@@ -67,27 +62,30 @@ function Cabecalho() {
   const local = cfgTexto(configs, 'evento_local', 'Escola Estadual Celso Rodrigues')
 
   return (
-    <header className="sticky top-0 z-40 border-b border-noite-900/10 bg-white/95 backdrop-blur">
-      <div className="bg-brand-600 text-white">
+    <header className="sticky top-0 z-40 border-b border-noite-900/10 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur">
+      <div className="hidden bg-brand-600 text-white sm:block">
         <Container className="flex h-8 items-center justify-between gap-3 text-[11px] font-semibold uppercase tracking-wide">
           <span className="inline-flex items-center gap-1.5">
             <CalendarDays className="h-3.5 w-3.5" /> {periodoEvento(inicio, fim)}
           </span>
-          <span className="hidden items-center gap-1.5 truncate sm:inline-flex">
+          <span className="inline-flex items-center gap-1.5 truncate">
             <MapPin className="h-3.5 w-3.5" /> {local}
           </span>
         </Container>
       </div>
 
-      <Container className="flex h-16 items-center justify-between gap-3">
+      <Container className="flex h-14 items-center justify-between gap-3 sm:h-16">
         <NavLink to="/" className="flex min-w-0 items-center gap-2.5">
           <img
             src="/brand/brasao-192.png"
             alt="Brasão da Escola Estadual Celso Rodrigues"
-            className="h-11 w-11 shrink-0 object-contain"
+            width={44}
+            height={44}
+            decoding="async"
+            className="h-9 w-9 shrink-0 object-contain sm:h-11 sm:w-11"
           />
           <span className="min-w-0 leading-none">
-            <span className="block truncate font-display text-2xl font-extrabold uppercase leading-none tracking-tight text-noite-900">
+            <span className="block truncate font-display text-xl font-extrabold uppercase leading-none tracking-tight text-noite-900 sm:text-2xl">
               Jogos Interclasses
             </span>
             <span className="mt-0.5 block truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-700">
@@ -98,9 +96,6 @@ function Cabecalho() {
         <Navegacao />
       </Container>
 
-      <Container className="lg:hidden">
-        <Navegacao mobile />
-      </Container>
     </header>
   )
 }
@@ -114,13 +109,17 @@ function Rodape() {
 
   return (
     <footer className="mt-8 bg-noite-950 text-slate-300">
-      <Container className="grid gap-8 py-12 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr]">
+      <Container className="grid gap-8 py-10 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr]">
         <div>
           <div className="flex items-center gap-3">
             <img
               src="/brand/brasao-512.png"
               alt="Brasão da Escola Estadual Celso Rodrigues"
-              className="h-14 w-14 rounded-full bg-white object-contain p-0.5"
+              width={56}
+              height={56}
+              loading="lazy"
+              decoding="async"
+              className="h-12 w-12 rounded-full bg-white object-contain p-0.5 sm:h-14 sm:w-14"
             />
             <div>
               <p className="font-display text-2xl font-extrabold uppercase leading-none tracking-tight text-white">
@@ -194,13 +193,15 @@ export default function PublicLayout() {
       >
         Pular para o conteúdo
       </a>
-      <div className="flex min-h-screen flex-col bg-areia-100">
+      <div className="flex min-h-screen flex-col bg-areia-100 pb-[calc(4.75rem+env(safe-area-inset-bottom))] lg:pb-0">
         <Cabecalho />
         <AvisoConfig />
         <main id="conteudo" className="flex-1">
           <Outlet />
         </main>
         <Rodape />
+        <PwaAtualizacao />
+        <MobileNav />
       </div>
     </ConfigProvider>
   )

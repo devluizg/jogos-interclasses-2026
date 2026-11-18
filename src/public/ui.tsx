@@ -137,7 +137,7 @@ export function VerTudo({ to, texto = 'Ver tudo' }: { to: string; texto?: string
   return (
     <Link
       to={to}
-      className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-700 hover:text-brand-900"
+      className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-brand-700 hover:text-brand-900"
     >
       {texto} <ArrowRight className="h-4 w-4" />
     </Link>

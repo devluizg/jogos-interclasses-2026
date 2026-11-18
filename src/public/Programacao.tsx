@@ -88,11 +88,11 @@ export default function Programacao() {
 
       <Container className="py-6">
         <Card className="mb-6 p-3">
-          <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="scrollbar-none flex snap-x gap-2 overflow-x-auto pb-1">
             <button
               type="button"
               onClick={() => setDia('todos')}
-              className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold ${dia === 'todos' ? 'bg-noite-900 text-white' : 'bg-areia-100 text-noite-800'}`}
+              className={`min-h-11 snap-start whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold ${dia === 'todos' ? 'bg-noite-900 text-white' : 'bg-areia-100 text-noite-800'}`}
             >
               Todos os dias
             </button>
@@ -101,7 +101,7 @@ export default function Programacao() {
                 key={chave}
                 type="button"
                 onClick={() => setDia(chave)}
-                className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold ${dia === chave ? 'bg-noite-900 text-white' : 'bg-areia-100 text-noite-800'}`}
+                className={`min-h-11 snap-start whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold ${dia === chave ? 'bg-noite-900 text-white' : 'bg-areia-100 text-noite-800'}`}
               >
                 {chave === 'a-definir' ? 'A definir' : `${dataCurta(chave)} · ${diaSemanaCurto(chave)}`}
                 <span className="ml-1.5 opacity-60">{lista.length}</span>
@@ -116,7 +116,7 @@ export default function Programacao() {
               id="modalidade"
               value={modalidade}
               onChange={(e) => setModalidade(e.target.value)}
-              className="min-h-9 flex-1 rounded-lg border border-noite-900/15 bg-white px-2 text-sm text-noite-900 sm:flex-none"
+              className="min-h-11 flex-1 rounded-lg border border-noite-900/15 bg-white px-2 text-sm text-noite-900 sm:flex-none"
             >
               <option value="todas">Todas</option>
               {modalidades.map(([slug, nome]) => (
@@ -127,7 +127,7 @@ export default function Programacao() {
               <button
                 type="button"
                 onClick={() => { setDia('todos'); setModalidade('todas') }}
-                className="text-xs font-semibold text-brand-700 hover:underline"
+                className="min-h-11 px-2 text-xs font-semibold text-brand-700 hover:underline"
               >
                 Limpar
               </button>

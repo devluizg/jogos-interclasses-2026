@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#08284a" />
+    <title>Sem conexão · Jogos Interclasses 2026</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        min-height: 100dvh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: max(1.5rem, env(safe-area-inset-top)) 1.5rem max(1.5rem, env(safe-area-inset-bottom));
+        background: #03111f;
+        color: #e2eaf3;
+      }
+      main {
+        width: min(100%, 28rem);
+        text-align: center;
+      }
+      img {
+        width: 6rem;
+        height: 6rem;
+        margin: 0 auto 1.5rem;
+        padding: 0.4rem;
+        border-radius: 1.5rem;
+        background: #fff;
+        object-fit: contain;
+      }
+      h1 {
+        margin: 0;
+        font-size: 2rem;
+        line-height: 1;
+        text-transform: uppercase;
+        letter-spacing: -0.02em;
+      }
+      p {
+        margin: 1rem 0 0;
+        color: #98b9d3;
+        font-size: 0.95rem;
+        line-height: 1.65;
+      }
+      .acoes {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.75rem;
+        margin-top: 1.75rem;
+      }
+      a,
+      button {
+        min-height: 2.75rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 0;
+        border-radius: 0.85rem;
+        padding: 0.7rem 1.1rem;
+        font: inherit;
+        font-size: 0.9rem;
+        font-weight: 700;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      a {
+        background: #ec4d09;
+        color: #fff;
+      }
+      button {
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/brand/brasao-192.png" alt="Brasão da Escola Estadual Celso Rodrigues" />
+      <h1>Sem conexão</h1>
+      <p>
+        Não foi possível carregar os Jogos Interclasses agora. Verifique a internet do celular e
+        tente novamente. A programação e os resultados voltam assim que a conexão for restabelecida.
+      </p>
+      <div class="acoes">
+        <button type="button" onclick="location.reload()">Tentar novamente</button>
+        <a href="/">Ir para o início</a>
+      </div>
+    </main>
+  </body>
+</html>

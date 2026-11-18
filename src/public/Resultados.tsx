@@ -51,7 +51,7 @@ export default function Resultados() {
       <PageHero
         chapeu="Placar oficial"
         titulo="Resultados"
-        descricao="Somente resultados publicados pela organização. Rascunhos e ajustes internos não aparecem no portal."
+        descricao="Resultados oficiais por modalidade e categoria."
       />
 
       <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
@@ -68,11 +68,11 @@ export default function Resultados() {
         ) : (
           <>
             {modalidades.length > 1 ? (
-              <div className="mb-5 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="scrollbar-none mb-5 flex snap-x gap-2 overflow-x-auto pb-1">
                 <button
                   type="button"
                   onClick={() => setModalidade('todas')}
-                  className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold ${modalidade === 'todas' ? 'bg-noite-900 text-white' : 'bg-white text-noite-800'}`}
+                  className={`min-h-11 snap-start whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold ${modalidade === 'todas' ? 'bg-noite-900 text-white' : 'bg-white text-noite-800'}`}
                 >
                   Todas
                 </button>
@@ -81,7 +81,7 @@ export default function Resultados() {
                     key={slug}
                     type="button"
                     onClick={() => setModalidade(slug)}
-                    className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold ${modalidade === slug ? 'bg-noite-900 text-white' : 'bg-white text-noite-800'}`}
+                    className={`min-h-11 snap-start whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold ${modalidade === slug ? 'bg-noite-900 text-white' : 'bg-white text-noite-800'}`}
                   >
                     {nome}
                   </button>

@@ -3,13 +3,13 @@ import {
   ArrowRight,
   CalendarDays,
   Clock,
+  Download,
   Flame,
   MapPin,
   Medal,
   Newspaper,
   Sparkles,
   Trophy,
-  Users,
 } from 'lucide-react'
 import { useAsync } from '@/lib/useAsync'
 import { supabase } from '@/lib/supabase'
@@ -21,6 +21,7 @@ import type {
   TacaPublica,
 } from '@/lib/types'
 import { cfgTexto, useConfig, useContagem, useRealtime, useSeo } from './hooks'
+import { usePwaInstall } from './usePwaInstall'
 import {
   agruparResultados,
   dataCurta,
@@ -48,15 +49,14 @@ type Resumo = {
   classificacao: ClassificacaoPublica[]
   noticias: Noticia[]
   taca: TacaPublica[]
-  contagens: { turmas: number; modalidades: number; jogos: number; resultados: number }
 }
 
 export default function Home() {
   const { configs } = useConfig()
+  const { podeInstalar, instalar } = usePwaInstall()
   const inicio = cfgTexto(configs, 'evento_inicio')
   const fim = cfgTexto(configs, 'evento_fim')
   const tema = cfgTexto(configs, 'evento_tema')
-  const sobre = cfgTexto(configs, 'evento_sobre')
   const local = cfgTexto(configs, 'evento_local', 'Escola Estadual Celso Rodrigues')
   const nomeEvento = cfgTexto(configs, 'evento_nome', 'Jogos Interclasses 2026')
   const contagem = useContagem(inicio)
@@ -64,7 +64,7 @@ export default function Home() {
   const encerrado = fimMs !== null && Number.isFinite(fimMs) && Date.now() > fimMs
 
   const dados = useAsync<Resumo>(async () => {
-    const [prox, res, classif, noticias, taca, turmas, modalidades, jogos, resultados] = await Promise.all([
+    const [prox, res, classif, noticias, taca] = await Promise.all([
       supabase
         .from('vw_programacao')
         .select('*')
@@ -84,13 +84,9 @@ export default function Home() {
         .order('publicado_em', { ascending: false, nullsFirst: false })
         .limit(3),
       supabase.from('vw_taca_publica').select('*').order('posicao').limit(3),
-      supabase.from('vw_turmas_publicas').select('*', { count: 'exact', head: true }),
-      supabase.from('modalidades').select('*', { count: 'exact', head: true }).eq('ativo', true),
-      supabase.from('vw_programacao').select('*', { count: 'exact', head: true }),
-      supabase.from('vw_resultados_publicos').select('*', { count: 'exact', head: true }),
     ])
 
-    for (const r of [prox, res, classif, noticias, taca, turmas, modalidades, jogos, resultados]) {
+    for (const r of [prox, res, classif, noticias, taca]) {
       if (r.error) throw r.error
     }
 
@@ -110,12 +106,6 @@ export default function Home() {
       classificacao: (classif.data ?? []) as ClassificacaoPublica[],
       noticias: (noticias.data ?? []) as Noticia[],
       taca: (taca.data ?? []) as TacaPublica[],
-      contagens: {
-        turmas: turmas.count ?? 0,
-        modalidades: modalidades.count ?? 0,
-        jogos: jogos.count ?? 0,
-        resultados: resultados.count ?? 0,
-      },
     }
   })
 
@@ -134,8 +124,10 @@ export default function Home() {
   useSeo({ descricao: `${nomeEvento}. ${tema}` })
 
   const grupos = agruparResultados(dados.data?.resultados ?? []).slice(0, 3)
-  const contagens = dados.data?.contagens
   const classificacao = dados.data?.classificacao ?? []
+  const temClassificacao = classificacao.some(
+    (c) => c.pontos > 0 || c.ouros > 0 || c.pratas > 0 || c.bronzes > 0,
+  )
   const tacaPublicada = (dados.data?.taca ?? []).length > 0
 
   return (
@@ -155,118 +147,99 @@ export default function Home() {
               'repeating-linear-gradient(135deg, #ffffff 0 1px, transparent 1px 14px)',
           }}
         />
-        <Container className="relative grid gap-10 py-12 sm:py-16 lg:grid-cols-[1.15fr_0.85fr] lg:items-center lg:py-20">
+        <Container className="relative flex flex-col gap-6 py-7 sm:py-12 lg:grid lg:grid-cols-[1.2fr_0.8fr] lg:items-center lg:py-16">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-300">
-              {local.split('–')[0].trim()}
-            </p>
-            <h1 className="mt-3 font-display text-5xl font-extrabold uppercase leading-[0.88] tracking-tight sm:text-7xl lg:text-8xl">
-              Jogos
-              <br />
-              Interclasses
-              <span className="ml-2 inline-block text-brand-400 sm:ml-3">2026</span>
-            </h1>
-            <p className="mt-4 max-w-xl text-base leading-relaxed text-slate-300">{tema}</p>
-
-            <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-300">
-              <span className="inline-flex items-center gap-2">
-                <CalendarDays className="h-4 w-4 text-brand-400" /> {periodoEvento(inicio, fim)}
-              </span>
-              <span className="inline-flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-brand-400" /> Santo Antônio do Tauá/PA
-              </span>
+            <div className="flex items-center gap-3.5 sm:gap-4">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white p-1.5 shadow-lg sm:hidden">
+                <img
+                  src="/brand/brasao-192.png"
+                  alt="Brasão da Escola Estadual Celso Rodrigues"
+                  width={64}
+                  height={64}
+                  fetchPriority="high"
+                  decoding="async"
+                  className="h-full w-full object-contain"
+                />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-300">
+                  {local.split('–')[0].trim()}
+                </p>
+                <h1 className="mt-1 font-display text-4xl font-extrabold uppercase leading-[0.9] tracking-tight sm:mt-2 sm:text-6xl lg:text-7xl">
+                  Jogos Interclasses{' '}
+                  <span className="text-brand-400">2026</span>
+                </h1>
+              </div>
             </div>
 
-            <div className="mt-7 flex flex-wrap gap-3">
-              <BotaoLink to="/programacao">
-                Ver programação <ArrowRight className="h-4 w-4" />
+            {tema ? (
+              <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-300 sm:text-base">{tema}</p>
+            ) : null}
+
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-300 sm:gap-x-5 sm:text-sm">
+              <span className="inline-flex items-center gap-1.5">
+                <CalendarDays className="h-4 w-4 text-brand-400" /> {periodoEvento(inicio, fim)}
+              </span>
+              {contagem && !contagem.passado ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-white">
+                  Abertura em {contagem.dias}d {String(contagem.horas).padStart(2, '0')}h
+                </span>
+              ) : encerrado ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200">
+                  <Trophy className="h-3.5 w-3.5 text-ouro-400" /> Edição encerrada
+                </span>
+              ) : contagem?.passado ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-400/40 bg-brand-500/20 px-3 py-1 text-xs font-semibold text-brand-200">
+                  <Flame className="h-3.5 w-3.5" /> Em andamento
+                </span>
+              ) : null}
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-2.5">
+              <BotaoLink to="/programacao" className="flex-1 sm:flex-none">
+                Ver jogos <ArrowRight className="h-4 w-4" />
               </BotaoLink>
-              <BotaoLink to="/classificacao" variant="outline" className="border-white/20 bg-white/10 text-white hover:bg-white/20">
+              <BotaoLink
+                to="/classificacao"
+                variant="outline"
+                className="flex-1 border-white/20 bg-white/10 text-white hover:bg-white/20 sm:flex-none"
+              >
                 Classificação
               </BotaoLink>
+              {podeInstalar ? (
+                <button
+                  type="button"
+                  onClick={() => void instalar()}
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-brand-400/40 bg-brand-500/20 px-4 text-sm font-semibold text-brand-100 transition-transform active:scale-[0.98] hover:bg-brand-500/30 sm:w-auto"
+                >
+                  <Download className="h-4 w-4" /> Instalar app
+                </button>
+              ) : null}
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-5">
+          <div className="hidden flex-col items-center justify-center lg:flex">
             <div className="relative">
               <div className="absolute -inset-3 rounded-[2.5rem] bg-brand-500/20 blur-2xl" />
-              <div className="relative flex h-44 w-44 items-center justify-center rounded-[2rem] bg-white p-4 shadow-2xl sm:h-56 sm:w-56">
+              <div className="relative flex h-52 w-52 items-center justify-center rounded-[2rem] bg-white p-4 shadow-2xl">
                 <img
                   src="/brand/brasao-512.png"
                   alt="Brasão da Escola Estadual Celso Rodrigues"
+                  width={208}
+                  height={208}
+                  fetchPriority="high"
+                  decoding="async"
                   className="h-full w-full object-contain"
                 />
               </div>
             </div>
-
-            {contagem && !contagem.passado ? (
-              <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
-                <p className="text-center text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                  Contagem para a abertura
-                </p>
-                <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-                  {[
-                    ['Dias', contagem.dias],
-                    ['Horas', contagem.horas],
-                    ['Min', contagem.minutos],
-                  ].map(([rotulo, valor]) => (
-                    <div key={rotulo as string} className="rounded-xl bg-white/10 py-2">
-                      <p className="font-display text-3xl font-extrabold leading-none text-white">
-                        {String(valor).padStart(2, '0')}
-                      </p>
-                      <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                        {rotulo}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : encerrado ? (
-              <div className="rounded-full border border-white/15 bg-white/5 px-5 py-2 text-sm font-semibold text-slate-300">
-                <Trophy className="mr-1.5 inline h-4 w-4 text-ouro-400" /> Edição encerrada
-              </div>
-            ) : contagem?.passado ? (
-              <div className="rounded-full border border-brand-400/40 bg-brand-500/15 px-5 py-2 text-sm font-semibold text-brand-200">
-                <Flame className="mr-1.5 inline h-4 w-4" /> O evento está em andamento
-              </div>
-            ) : (
-              <div className="rounded-full border border-white/15 bg-white/5 px-5 py-2 text-sm font-semibold text-slate-300">
-                Datas em breve
-              </div>
-            )}
           </div>
-        </Container>
-      </section>
-
-      <section className="border-b border-noite-900/10 bg-white">
-        <Container className="grid grid-cols-2 gap-4 py-6 sm:grid-cols-4">
-          {[
-            { rotulo: 'Turmas', valor: contagens?.turmas, icone: Users },
-            { rotulo: 'Modalidades', valor: contagens?.modalidades, icone: Trophy },
-            { rotulo: 'Jogos', valor: contagens?.jogos, icone: CalendarDays },
-            { rotulo: 'Resultados', valor: contagens?.resultados, icone: Medal },
-          ].map((item) => (
-            <div key={item.rotulo} className="flex items-center gap-3">
-              <div className="rounded-xl bg-areia-100 p-2.5 text-noite-700">
-                <item.icone className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="font-display text-3xl font-extrabold leading-none text-noite-900">
-                  {dados.loading ? '—' : (item.valor ?? 0)}
-                </p>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  {item.rotulo}
-                </p>
-              </div>
-            </div>
-          ))}
         </Container>
       </section>
 
       <Section
         eyebrow="Acontece nos jogos"
         titulo="Próximos jogos"
-        descricao="Programação oficial divulgada pela organização. Horários e locais podem ser ajustados."
         acao={<VerTudo to="/programacao" />}
         className="pb-0"
       >
@@ -283,9 +256,9 @@ export default function Home() {
             icone={<CalendarDays className="h-7 w-7" />}
           />
         ) : (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-2 md:gap-4 md:overflow-visible md:px-0 md:pb-0">
             {(dados.data?.proximos ?? []).map((jogo) => (
-              <Card key={jogo.id} className="p-4">
+              <Card key={jogo.id} className="w-[82vw] max-w-sm shrink-0 snap-start p-4 md:w-auto md:max-w-none">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-700">
@@ -323,9 +296,8 @@ export default function Home() {
       </Section>
 
       <Section
-        eyebrow="Placar oficial"
+        eyebrow="Placar"
         titulo="Últimos resultados"
-        descricao="Somente resultados publicados pela organização."
         acao={<VerTudo to="/resultados" />}
       >
         {dados.loading ? (
@@ -341,9 +313,9 @@ export default function Home() {
             icone={<Medal className="h-7 w-7" />}
           />
         ) : (
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-3 md:gap-4 md:overflow-visible md:px-0 md:pb-0">
             {grupos.map((grupo) => (
-              <Card key={grupo.chave} className="p-4">
+              <Card key={grupo.chave} className="w-[80vw] max-w-sm shrink-0 snap-start p-4 md:w-auto md:max-w-none">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-700">
                     {tituloCategoria(grupo.modalidade, grupo.categoria)}
@@ -373,13 +345,12 @@ export default function Home() {
         <Section
           eyebrow="Disputa geral"
           titulo="Classificação"
-          descricao="Pontuação acumulada por turma nos resultados oficiais."
           acao={<VerTudo to="/classificacao" />}
           className="py-10 sm:py-12"
         >
           {dados.loading ? (
             <div className="h-56 animate-pulse rounded-2xl bg-areia-100" />
-          ) : classificacao.length === 0 || (contagens?.resultados ?? 0) === 0 ? (
+          ) : classificacao.length === 0 || !temClassificacao ? (
             <Vazio
               titulo="Classificação em preparação"
               texto="A tabela começa a valer com a publicação do primeiro resultado oficial."
@@ -400,7 +371,7 @@ export default function Home() {
                   <Link
                     key={linha.turma_id}
                     to="/classificacao"
-                    className="grid grid-cols-[2.2rem_1fr_3.5rem] items-center gap-2 px-3 py-2.5 hover:bg-areia-50 sm:grid-cols-[3rem_1fr_3rem_3rem_3rem_5rem] sm:px-4"
+                    className="grid grid-cols-[2.2rem_1fr_3.5rem] items-center gap-2 px-3 py-2.5 transition-colors hover:bg-areia-50 active:bg-areia-100 sm:grid-cols-[3rem_1fr_3rem_3rem_3rem_5rem] sm:px-4"
                   >
                     <Medalha posicao={linha.posicao} className="h-7 w-7 text-sm" />
                     <span className="flex min-w-0 items-center gap-2">
@@ -437,7 +408,7 @@ export default function Home() {
           <div className="grid gap-4 md:grid-cols-3">
             {(dados.data?.noticias ?? []).map((noticia) => (
               <Link key={noticia.id} to={`/noticias/${noticia.slug}`} className="group">
-                <Card className="flex h-full flex-col p-4 transition-transform group-hover:-translate-y-0.5">
+                <Card className="flex h-full flex-col p-4 transition-transform group-hover:-translate-y-0.5 active:scale-[0.99]">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-700">
                     <Newspaper className="mb-0.5 mr-1 inline h-3.5 w-3.5" />
                     {dataCurta(noticia.publicado_em)}
@@ -467,7 +438,7 @@ export default function Home() {
                 {cfgTexto(configs, 'taca_nome', 'Taça Turma Protagonista')}
               </h2>
               <p className="mt-3 max-w-md text-sm leading-relaxed text-slate-300">
-                Desempenho esportivo, participação, torcida, identificação e conduta. Uma disputa que vai além do placar.
+                Desempenho esportivo, participação, torcida, identificação e conduta.
               </p>
               <BotaoLink to="/taca" className="mt-5">
                 Ver ranking da Taça <ArrowRight className="h-4 w-4" />
@@ -492,23 +463,6 @@ export default function Home() {
             </div>
           </Container>
         </section>
-      ) : null}
-
-      {sobre ? (
-        <Section eyebrow="Sobre os jogos" titulo="Mais que uma competição">
-          <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-            <Card className="p-5">
-              <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">{sobre}</p>
-            </Card>
-            <Card className="bg-brand-600 p-5 text-white">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-100">Tema 2026</p>
-              <p className="mt-2 font-display text-3xl font-bold uppercase leading-tight">{tema}</p>
-              <p className="mt-4 text-xs leading-relaxed text-brand-100">
-                Evento organizado pela Escola Estadual Celso Rodrigues, em Santo Antônio do Tauá/PA.
-              </p>
-            </Card>
-          </div>
-        </Section>
       ) : null}
     </>
   )

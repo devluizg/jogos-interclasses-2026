@@ -71,12 +71,12 @@ export default function Documentos() {
                             href={doc.arquivo_url}
                             target="_blank"
                             rel="noreferrer"
-                            className="rounded-lg bg-noite-900 px-3 py-2 text-xs font-semibold text-white hover:bg-noite-950"
+                            className="inline-flex min-h-11 items-center rounded-lg bg-noite-900 px-3 text-xs font-semibold text-white hover:bg-noite-950 active:bg-black"
                           >
                             Abrir
                           </a>
                         ) : (
-                          <span className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-500">
+                          <span className="inline-flex min-h-11 items-center rounded-lg bg-slate-100 px-3 text-xs font-semibold text-slate-500">
                             Em breve
                           </span>
                         )}
