@@ -2,7 +2,8 @@
 
 Portal oficial dos Jogos Interclasses 2026 (24 a 27/11/2026), Santo Antônio do Tauá/PA.
 
-**Status atual: Etapas 1 (banco), 2 (painel `/admin`) e 3 (portal público `/`) concluídas.**
+**Status atual: Etapas 1 (banco), 2 (painel `/admin`), 3 (portal público `/`) e 4 (produção) concluídas.**
+Produção: <https://jogos-interclasses-2026.dev-luizg.workers.dev>
 
 ## O que existe
 
@@ -135,7 +136,7 @@ O script cria um PostgreSQL 16 descartável, aplica stubs de `auth`, roda as mig
 | 1 | Futsal: 9º inscrito bloqueado | ✅ banco |
 | 2 | Vôlei com 5 avisa mínimo 6 e não aprova | ✅ banco |
 | 3 | Quiz aceita 5 equipes de 3 e bloqueia a 6ª | ✅ banco |
-| 4 | Resultado oficial atualiza o público sem recarregar | ✅ portal (Realtime) — validar no Supabase real |
+| 4 | Resultado oficial atualiza o público sem recarregar | ✅ Realtime validado no Supabase real; falta validar com resultado oficial |
 | 5 | 1º/2º/3º = 100/50/25 uma vez por modalidade/categoria/gênero | ✅ banco |
 | 6 | Desempate na ordem configurada; empate persistente sinalizado | ✅ banco |
 | 7 | Rascunho não altera a classificação pública | ✅ banco |
@@ -172,7 +173,7 @@ Não foram inventados estudantes, inscrições, horários, partidas, resultados,
 
 ## Próximas etapas
 
-4. Publicar no Cloudflare Workers e preencher os dados reais de estudantes, inscrições, programação e resultados.
+4. Preencher os dados reais de estudantes, inscrições, programação e resultados; validar a atualização de um resultado oficial pelo Realtime.
 
 ## Limites gratuitos (verifique os valores atuais)
 
