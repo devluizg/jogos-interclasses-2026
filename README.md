@@ -66,7 +66,7 @@ supabase/tests/
   0000_stubs.sql               stubs de auth para teste em Postgres puro
   0001_testes_fase1.sql        testes de banco
   run_local.sh                 sobe Docker, aplica migrations e roda testes
-public/_redirects              fallback de SPA para Cloudflare Pages
+wrangler.jsonc                 deploy no Cloudflare Workers (assets + fallback SPA)
 .env.example                   variáveis do frontend
 ```
 
@@ -116,7 +116,7 @@ npm run typecheck       # tsc --noEmit
 npm run build           # typecheck + build de produção em dist/
 ```
 
-Para publicar no Cloudflare Pages: build `npm run build`, diretório de saída `dist`; as variáveis `VITE_*` devem ser cadastradas no painel do Pages. O arquivo `public/_redirects` garante o fallback das rotas.
+Para publicar no Cloudflare Workers (Builds conectados ao GitHub): build `npm run build`, deploy `npx wrangler deploy` e as variáveis `VITE_*` cadastradas no projeto. O `wrangler.jsonc` publica `dist` e configura o fallback das rotas do SPA.
 
 ## Testar localmente (sem Supabase)
 
@@ -168,15 +168,15 @@ Testes extras já cobertos: correção de resultado oficial exige confirmação 
 
 ## O que está deliberadamente vazio
 
-Não foram inventados estudantes, inscrições, horários, partidas, resultados, notícias, escudos, nomes de equipe, cores ou campeões. Os PDFs aparecem como documentos cadastrados com `arquivo_url` nulo até o upload no painel.
+Não foram inventados estudantes, inscrições, horários, partidas, resultados, notícias, escudos, nomes de equipe, cores ou campeões. O Regulamento e o Projeto Executivo já estão no Storage; os 21 documentos usam o PDF do Regulamento enquanto os anexos não forem separados.
 
 ## Próximas etapas
 
-4. Testes de interface com Supabase real, upload de PDF no Storage e publicação no Cloudflare Pages.
+4. Publicar no Cloudflare Workers e preencher os dados reais de estudantes, inscrições, programação e resultados.
 
 ## Limites gratuitos (verifique os valores atuais)
 
 - **Supabase Free:** ~500 MB de banco, ~1 GB de Storage, ~5 GB de egress e 50 mil usuários ativos/mês; pausa do projeto por inatividade.
-- **Cloudflare Pages Free:** ~500 builds/mês, requisições e banda sem custo adicional relevante.
+- **Cloudflare Workers Free:** requisições e banda sem custo adicional relevante para este site estático.
 
 Nenhum recurso pago é necessário para as etapas 1 e 2.
