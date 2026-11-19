@@ -14,6 +14,7 @@ export default defineConfig({
         'brand/brasao-512.png',
         'brand/brasao-maskable-512.png',
         'brand/apple-touch-icon.png',
+        'brand/logo-interclasses.jpg',
       ],
       manifest: {
         id: '/',

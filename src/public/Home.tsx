@@ -150,15 +150,15 @@ export default function Home() {
         <Container className="relative flex flex-col gap-6 py-7 sm:py-12 lg:grid lg:grid-cols-[1.2fr_0.8fr] lg:items-center lg:py-16">
           <div>
             <div className="flex items-center gap-3.5 sm:gap-4">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white p-1.5 shadow-lg sm:hidden">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg sm:hidden">
                 <img
-                  src="/brand/brasao-192.png"
-                  alt="Brasão da Escola Estadual Celso Rodrigues"
+                  src="/brand/logo-interclasses.jpg"
+                  alt="Logo Jogos Interclasses 2026"
                   width={64}
                   height={64}
                   fetchPriority="high"
                   decoding="async"
-                  className="h-full w-full object-contain"
+                  className="h-full w-full object-cover"
                 />
               </div>
               <div className="min-w-0">
@@ -221,15 +221,15 @@ export default function Home() {
           <div className="hidden flex-col items-center justify-center lg:flex">
             <div className="relative">
               <div className="absolute -inset-3 rounded-[2.5rem] bg-brand-500/20 blur-2xl" />
-              <div className="relative flex h-52 w-52 items-center justify-center rounded-[2rem] bg-white p-4 shadow-2xl">
+              <div className="relative flex h-52 w-52 items-center justify-center overflow-hidden rounded-[2rem] bg-white shadow-2xl">
                 <img
-                  src="/brand/brasao-512.png"
-                  alt="Brasão da Escola Estadual Celso Rodrigues"
+                  src="/brand/logo-interclasses.jpg"
+                  alt="Logo Jogos Interclasses 2026"
                   width={208}
                   height={208}
                   fetchPriority="high"
                   decoding="async"
-                  className="h-full w-full object-contain"
+                  className="h-full w-full object-cover"
                 />
               </div>
             </div>
