@@ -50,7 +50,7 @@ export default function ModalidadePublica() {
     }
   }, [slug])
 
-  useRealtime(['modalidades', 'modalidade_categorias', 'resultados', 'partidas'], dados.reload)
+  useRealtime(['modalidades', 'modalidade_categorias', 'resultados', 'partidas', 'partida_participantes'], dados.reload)
 
   const detalhe = dados.data
   useSeo({
@@ -199,7 +199,11 @@ export default function ModalidadePublica() {
                       <CalendarDays className="mb-0.5 inline h-3.5 w-3.5" /> {dataCurta(jogo.data_hora)} · {horaCurta(jogo.data_hora)}
                     </p>
                     <p className="mt-1 text-xs text-slate-600">
-                      {jogo.turmas.length > 0 ? jogo.turmas.map((n) => `Turma ${n}`).join(' × ') : 'Turmas a definir'}
+                      {jogo.atletas.length > 0
+                        ? jogo.atletas.join(' × ')
+                        : jogo.turmas.length > 0
+                          ? jogo.turmas.map((n) => `Turma ${n}`).join(' × ')
+                          : 'Participantes a definir'}
                     </p>
                     <p className="mt-1 text-[11px] text-slate-500">
                       <MapPin className="mb-0.5 inline h-3.5 w-3.5" /> {jogo.local ?? 'Local a definir'}

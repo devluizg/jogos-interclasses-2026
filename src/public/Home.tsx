@@ -10,6 +10,7 @@ import {
   Newspaper,
   Sparkles,
   Trophy,
+  UserRound,
 } from 'lucide-react'
 import { useAsync } from '@/lib/useAsync'
 import { supabase } from '@/lib/supabase'
@@ -273,7 +274,13 @@ export default function Home() {
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  {jogo.turmas.length > 0 ? (
+                  {jogo.atletas.length > 0 ? (
+                    jogo.atletas.map((nome, i) => (
+                      <span key={`${nome}-${i}`} className="inline-flex items-center gap-1.5 rounded-lg bg-areia-100 px-2 py-1 text-xs font-medium text-slate-600">
+                        <UserRound className="h-3.5 w-3.5 text-brand-700" /> {nome}
+                      </span>
+                    ))
+                  ) : jogo.turmas.length > 0 ? (
                     jogo.turmas.map((numero) => (
                       <span key={numero} className="inline-flex items-center gap-1.5 rounded-lg bg-areia-100 px-2 py-1">
                         <NumeroTurma numero={numero} className="h-7 min-w-7 text-base" />
@@ -281,7 +288,7 @@ export default function Home() {
                       </span>
                     ))
                   ) : (
-                    <span className="text-xs text-slate-500">Turmas a definir</span>
+                    <span className="text-xs text-slate-500">Participantes a definir</span>
                   )}
                 </div>
 

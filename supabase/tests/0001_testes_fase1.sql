@@ -658,6 +658,63 @@ $$;
 
 reset role;
 
+-- ---------------------------------------------------------------------
+-- Partidas individuais: atletas da mesma turma na mesma partida (mesa)
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_cat       uuid;
+  v_partida   uuid;
+  v_a1        uuid;
+  v_a2        uuid;
+  v_atletas   text[];
+  v_turmas    smallint[];
+  v_duplicado boolean := false;
+begin
+  select mc.id into v_cat
+  from public.modalidade_categorias mc
+  join public.modalidades m on m.id = mc.modalidade_id
+  where m.slug = 'uno' and mc.nome = 'Única';
+
+  select id into v_a1 from public.estudantes
+  where turma_id = (select id from public.turmas where numero = 101)
+  order by nome_completo limit 1;
+  select id into v_a2 from public.estudantes
+  where turma_id = (select id from public.turmas where numero = 101)
+  order by nome_completo offset 1 limit 1;
+
+  if v_cat is null or v_a1 is null or v_a2 is null then
+    raise exception 'FALHOU: falta categoria UNO ou atletas da turma 101 para o teste.';
+  end if;
+
+  insert into public.partidas (modalidade_categoria_id, fase, status)
+  values (v_cat, 'classificatoria', 'programado') returning id into v_partida;
+
+  insert into public.partida_participantes (partida_id, estudante_id)
+  values (v_partida, v_a1), (v_partida, v_a2);
+
+  select atletas, turmas into v_atletas, v_turmas
+  from public.vw_programacao where id = v_partida;
+
+  if coalesce(array_length(v_atletas, 1), 0) <> 2 then
+    raise exception 'FALHOU: vw_programacao deveria listar 2 atletas na mesa.';
+  end if;
+  if coalesce(array_length(v_turmas, 1), 0) <> 0 then
+    raise exception 'FALHOU: partida de atletas não deveria listar turmas.';
+  end if;
+
+  begin
+    insert into public.partida_participantes (partida_id, estudante_id)
+    values (v_partida, v_a1);
+  exception when unique_violation then
+    v_duplicado := true;
+  end;
+  if not v_duplicado then
+    raise exception 'FALHOU: o mesmo atleta entrou duas vezes na mesma partida.';
+  end if;
+end
+$$;
+
 rollback;
 
 \echo 'TODOS OS TESTES DE BANCO DA FASE 1 PASSARAM'

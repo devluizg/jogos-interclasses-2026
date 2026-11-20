@@ -296,6 +296,7 @@ create table public.partida_participantes (
   id           uuid primary key default gen_random_uuid(),
   partida_id   uuid not null references public.partidas(id) on delete cascade,
   turma_id     uuid not null references public.turmas(id) on delete restrict,
+  estudante_id uuid references public.estudantes(id) on delete restrict,
   inscricao_id uuid references public.inscricoes(id) on delete set null,
   placar       smallint,
   tempo        numeric(10,2),
@@ -303,11 +304,20 @@ create table public.partida_participantes (
   posicao      smallint,
   vencedor     boolean,
   observacao   text,
-  created_at   timestamptz not null default now(),
-  unique (partida_id, turma_id)
+  created_at   timestamptz not null default now()
 );
 
 create index idx_partida_participantes_turma on public.partida_participantes(turma_id);
+create index idx_partida_participantes_estudante on public.partida_participantes(estudante_id);
+
+-- Uma linha por turma quando o participante é a turma; um atleta no máximo
+-- uma vez por partida (mesas/individuais permitem vários atletas da turma).
+create unique index uq_pp_partida_turma
+  on public.partida_participantes(partida_id, turma_id)
+  where estudante_id is null;
+create unique index uq_pp_partida_estudante
+  on public.partida_participantes(partida_id, estudante_id)
+  where estudante_id is not null;
 
 -- ---------------------------------------------------------------------
 -- Resultados oficiais (fonte da classificação e do medalheiro)
@@ -943,6 +953,33 @@ create trigger trg_partidas_guard
 before insert or update on public.partidas
 for each row execute function public.fn_partidas_guard();
 
+-- Participante atleta: mantém a turma do atleta sempre consistente.
+create or replace function public.fn_partida_participantes_guard()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_turma uuid;
+begin
+  if new.estudante_id is not null then
+    select turma_id into v_turma
+    from public.estudantes
+    where id = new.estudante_id;
+    if v_turma is null then
+      raise exception 'Atleta não encontrado. Cadastre o atleta antes de incluí-lo na partida.';
+    end if;
+    new.turma_id := v_turma;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger trg_partida_participantes_guard
+before insert or update on public.partida_participantes
+for each row execute function public.fn_partida_participantes_guard();
+
 -- ---------------------------------------------------------------------
 -- Resultados: prêmios, confirmação de correção e histórico
 -- ---------------------------------------------------------------------
@@ -1151,8 +1188,8 @@ as $$
          'Partidas ' || a.id || ' e ' || b.id || ' no mesmo horário'
   from ativas a
   join ativas b on b.data_hora = a.data_hora and b.id > a.id
-  join public.partida_participantes pa on pa.partida_id = a.id
-  join public.partida_participantes pb on pb.partida_id = b.id and pb.turma_id = pa.turma_id
+  join public.partida_participantes pa on pa.partida_id = a.id and pa.estudante_id is null
+  join public.partida_participantes pb on pb.partida_id = b.id and pb.turma_id = pa.turma_id and pb.estudante_id is null
   join public.turmas t on t.id = pa.turma_id
   union
   select 'local'::text, a.data_hora,
@@ -1483,9 +1520,17 @@ select
     (select array_agg(t.numero order by t.numero)
      from public.partida_participantes pp
      join public.turmas t on t.id = pp.turma_id
-     where pp.partida_id = p.id),
+     where pp.partida_id = p.id and pp.estudante_id is null),
     '{}'::smallint[]
-  ) as turmas
+  ) as turmas,
+  m.tipo as modalidade_tipo,
+  coalesce(
+    (select array_agg(public.nome_publico(e.nome_completo) order by e.nome_completo)
+     from public.partida_participantes pp
+     join public.estudantes e on e.id = pp.estudante_id
+     where pp.partida_id = p.id),
+    '{}'::text[]
+  ) as atletas
 from public.partidas p
 join public.modalidade_categorias mc on mc.id = p.modalidade_categoria_id
 join public.modalidades m on m.id = mc.modalidade_id

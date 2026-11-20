@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CalendarDays, Clock, MapPin } from 'lucide-react'
+import { CalendarDays, Clock, MapPin, UserRound } from 'lucide-react'
 import { useAsync } from '@/lib/useAsync'
 import { supabase } from '@/lib/supabase'
 import type { Programacao as Jogo } from '@/lib/types'
@@ -185,7 +185,15 @@ export default function Programacao() {
                           </div>
 
                           <div className="mt-3 flex flex-wrap items-center gap-2">
-                            {jogo.turmas.length > 0 ? (
+                            {jogo.atletas.length > 0 ? (
+                              <>
+                                {jogo.atletas.map((nome, i) => (
+                                  <span key={`${nome}-${i}`} className="inline-flex items-center gap-1.5 rounded-lg bg-areia-100 px-2 py-1 text-xs font-medium text-slate-700">
+                                    <UserRound className="h-3.5 w-3.5 text-brand-700" /> {nome}
+                                  </span>
+                                ))}
+                              </>
+                            ) : jogo.turmas.length > 0 ? (
                               jogo.turmas.map((numero) => (
                                 <span key={numero} className="inline-flex items-center gap-1.5 rounded-lg bg-areia-100 py-1 pl-1 pr-2">
                                   <NumeroTurma numero={numero} className="h-7 min-w-7 text-sm" />
@@ -193,7 +201,7 @@ export default function Programacao() {
                                 </span>
                               ))
                             ) : (
-                              <span className="text-xs text-slate-500">Turmas a definir</span>
+                              <span className="text-xs text-slate-500">Participantes a definir</span>
                             )}
                           </div>
 

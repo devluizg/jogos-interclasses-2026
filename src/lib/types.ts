@@ -131,6 +131,7 @@ export interface PartidaParticipante {
   id: string
   partida_id: string
   turma_id: string
+  estudante_id: string | null
   inscricao_id: string | null
   placar: number | null
   tempo: number | null
@@ -139,6 +140,7 @@ export interface PartidaParticipante {
   vencedor: boolean | null
   observacao: string | null
   turmas?: { numero: number; nome_equipe: string | null } | null
+  estudantes?: { nome_completo: string; turmas?: { numero: number } | null } | null
 }
 
 export interface Resultado {
@@ -334,6 +336,8 @@ export interface Programacao {
   formato_resultado: FormatoResultado
   local: string | null
   turmas: number[]
+  modalidade_tipo: TipoModalidade
+  atletas: string[]
 }
 
 export interface ResultadoPublico {

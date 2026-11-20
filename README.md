@@ -23,7 +23,7 @@ Produção: <https://jogos-interclasses-2026.dev-luizg.workers.dev>
 - Dashboard com pendências: modalidades sem mínimo, partidas sem resultado, inscrições pendentes, conflitos de horário e contagem para o evento.
 - CRUD de turmas (representantes, cores), estudantes (com busca e taxa), modalidades e categorias.
 - Inscrições por equipe com montagem de participantes, validação do banco, aprovação/rejeição e alertas.
-- Programação: criação de partidas, locais, horários, turmas e lançamento de resultados.
+- Programação: criação de partidas, locais, horários e lançamento de resultados. Em modalidades individuais, a partida pode ser montada com **atletas** (atleta vs atleta); em baralho/UNO/dominó, o painel limita cada mesa a 4 atletas. O portal mostra quem compete em cada jogo.
 - Resultados oficiais: rascunho/publicação, correção com histórico e anulação.
 - Conduta: ocorrências por turma e gênero (usadas no desconto da Taça).
 - Taça Turma Protagonista: critérios/pesos, jurados, notas, ranking e publicação no portal.
@@ -75,8 +75,9 @@ wrangler.jsonc                 deploy no Cloudflare Workers (assets + fallback S
 
 1. Crie um projeto em <https://supabase.com> e guarde `Project URL` e `anon public key`.
 2. Abra **SQL Editor** e execute, nesta ordem, o conteúdo de:
-   `0001_schema.sql`, `0002_funcoes_validacoes_views.sql`, `0003_rls_grants_realtime.sql`, `0004_seed.sql`, `0005_ajustes_admin.sql`, `0006_storage_documentos.sql`, `0007_regras_portal_publico.sql`, `0008_correcao_texto_fifa.sql`.
-   - Alternativa via CLI: `npm i -g supabase`, `supabase init`, `supabase link --project-ref SEU_REF` e `supabase db push`.
+   `0001_schema.sql`, `0002_funcoes_validacoes_views.sql`, `0003_rls_grants_realtime.sql`, `0004_seed.sql`, `0005_ajustes_admin.sql`, `0006_storage_documentos.sql`, `0007_regras_portal_publico.sql`, `0008_correcao_texto_fifa.sql`, `0009_seed_turma_101.sql`, `0010_seed_turmas_102_103_104.sql`, `0011_seed_turmas_201_a_302.sql`, `0012_partidas_atletas.sql`.
+    - **Banco já configurado:** rode apenas a `0012_partidas_atletas.sql` no SQL Editor; as demais já estão aplicadas.
+    - Alternativa via CLI: `npm i -g supabase`, `supabase init`, `supabase link --project-ref SEU_REF` e `supabase db push`.
    - A `0006` cria o bucket público `documentos` (PDF, 25 MB) e as policies de upload para admins. Se o schema `storage` ainda não existir, a migration é ignorada sem erro.
 3. Em **Authentication > Users**, crie o usuário administrador (e-mail + senha) e confirme o e-mail.
 4. Em **Authentication > Providers/Sign In**, desative o cadastro público ("Allow new users to sign up").

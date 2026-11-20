@@ -5,9 +5,11 @@ import {
   CalendarDays,
   Pencil,
   Plus,
+  Search,
   Swords,
   Trash2,
   Trophy,
+  UserRound,
 } from 'lucide-react'
 import {
   Aviso,
@@ -46,6 +48,7 @@ import type {
 type Linha = {
   id?: string
   turma_id: string
+  estudante_id: string
   placar: string
   tempo: string
   pontuacao: string
@@ -53,6 +56,15 @@ type Linha = {
   vencedor: '' | 'sim' | 'nao'
   observacao: string
 }
+
+type AtletaOpcao = {
+  id: string
+  nome_completo: string
+  turma_id: string
+  turmas?: { numero: number } | null
+}
+
+const MODALIDADES_MESA = ['uno', 'baralho', 'domino']
 
 type Conflito = {
   tipo: string
@@ -97,6 +109,7 @@ function linhaDe(p: PartidaParticipante): Linha {
   return {
     id: p.id,
     turma_id: p.turma_id,
+    estudante_id: p.estudante_id ?? '',
     placar: p.placar === null ? '' : String(p.placar),
     tempo: p.tempo === null ? '' : String(p.tempo),
     pontuacao: p.pontuacao === null ? '' : String(p.pontuacao),
@@ -112,7 +125,7 @@ export default function Partidas() {
   const [dataFiltro, setDataFiltro] = useState('')
 
   const aux = useAsync(async () => {
-    const [cats, turmas, locais] = await Promise.all([
+    const [cats, turmas, locais, alunos] = await Promise.all([
       supabase
         .from('modalidade_categorias')
         .select('*, modalidades(id, nome, tipo, slug)')
@@ -120,14 +133,21 @@ export default function Partidas() {
         .order('nome'),
       supabase.from('turmas').select('*').eq('ativo', true).order('numero'),
       supabase.from('locais').select('*').eq('ativo', true).order('ordem', { nullsFirst: false }),
+      supabase
+        .from('estudantes')
+        .select('id, nome_completo, turma_id, turmas(numero)')
+        .eq('ativo', true)
+        .order('nome_completo'),
     ])
     if (cats.error) throw cats.error
     if (turmas.error) throw turmas.error
     if (locais.error) throw locais.error
+    if (alunos.error) throw alunos.error
     return {
       categorias: cats.data as CategoriaComModalidade[],
       turmas: turmas.data as Turma[],
       locais: locais.data as Local[],
+      atletas: (alunos.data ?? []) as unknown as AtletaOpcao[],
     }
   })
 
@@ -135,7 +155,7 @@ export default function Partidas() {
     let q = supabase
       .from('partidas')
       .select(
-        '*, modalidade_categorias(nome, min_participantes_partida, modalidades(id, nome)), locais(nome), partida_participantes(*, turmas(numero, nome_equipe))',
+        '*, modalidade_categorias(nome, min_participantes_partida, modalidades(id, nome)), locais(nome), partida_participantes(*, turmas(numero, nome_equipe), estudantes(nome_completo))',
       )
       .order('data_hora', { ascending: true, nullsFirst: false })
       .order('created_at')
@@ -153,6 +173,7 @@ export default function Partidas() {
   const categorias = aux.data?.categorias ?? []
   const turmas = aux.data?.turmas ?? []
   const locais = aux.data?.locais ?? []
+  const atletas = aux.data?.atletas ?? []
 
   const gruposCategorias = useMemo(() => {
     const mapa = new Map<string, { nome: string; itens: CategoriaComModalidade[] }>()
@@ -174,6 +195,9 @@ export default function Partidas() {
   const [linhas, setLinhas] = useState<Linha[]>([])
   const [salvandoPartida, setSalvandoPartida] = useState(false)
   const [erroPartida, setErroPartida] = useState<string | null>(null)
+  const [modoParticipantes, setModoParticipantes] = useState<'turmas' | 'atletas'>('turmas')
+  const [pickerAberto, setPickerAberto] = useState(false)
+  const [buscaAtleta, setBuscaAtleta] = useState('')
 
   const [excluindo, setExcluindo] = useState<Partida | null>(null)
   const [removendo, setRemovendo] = useState(false)
@@ -230,7 +254,7 @@ export default function Partidas() {
         const { data: completa } = await supabase
           .from('partidas')
           .select(
-            '*, modalidade_categorias(nome, min_participantes_partida, modalidades(id, nome)), locais(nome), partida_participantes(*, turmas(numero, nome_equipe))',
+            '*, modalidade_categorias(nome, min_participantes_partida, modalidades(id, nome)), locais(nome), partida_participantes(*, turmas(numero, nome_equipe), estudantes(nome_completo))',
           )
           .eq('id', data.id)
           .single()
@@ -253,9 +277,27 @@ export default function Partidas() {
   }
 
   function abrirResultado(p: Partida) {
+    const categoria = categorias.find((c) => c.id === p.modalidade_categoria_id)
+    setModoParticipantes(categoria?.modalidades?.tipo === 'individual' ? 'atletas' : 'turmas')
+    setPickerAberto(false)
+    setBuscaAtleta('')
     setErroPartida(null)
     setGerenciando(p)
     setLinhas((p.partida_participantes ?? []).map(linhaDe))
+  }
+
+  const categoriaGerenciando = gerenciando
+    ? categorias.find((c) => c.id === gerenciando.modalidade_categoria_id)
+    : null
+  const ehMesa = MODALIDADES_MESA.includes(categoriaGerenciando?.modalidades?.slug ?? '')
+
+  function alternarModo(modo: 'turmas' | 'atletas') {
+    if (modo === modoParticipantes) return
+    setModoParticipantes(modo)
+    setLinhas([])
+    setErroPartida(null)
+    setPickerAberto(false)
+    setBuscaAtleta('')
   }
 
   function adicionarLinha() {
@@ -265,6 +307,7 @@ export default function Partidas() {
       ...ls,
       {
         turma_id: disponivel?.id ?? '',
+        estudante_id: '',
         placar: '',
         tempo: '',
         pontuacao: '',
@@ -274,6 +317,49 @@ export default function Partidas() {
       },
     ])
   }
+
+  function adicionarAtleta(id: string) {
+    const atleta = atletas.find((a) => a.id === id)
+    if (!atleta) return
+    if (linhas.some((l) => l.estudante_id === id)) {
+      setErroPartida('Este atleta já está na partida.')
+      return
+    }
+    if (ehMesa && linhas.length >= 4) {
+      setErroPartida('A mesa já tem 4 atletas. Crie outra partida para a próxima mesa.')
+      return
+    }
+    setErroPartida(null)
+    setLinhas((ls) => [
+      ...ls,
+      {
+        turma_id: atleta.turma_id,
+        estudante_id: id,
+        placar: '',
+        tempo: '',
+        pontuacao: '',
+        posicao: '',
+        vencedor: '',
+        observacao: '',
+      },
+    ])
+    setPickerAberto(false)
+    setBuscaAtleta('')
+  }
+
+  const atletasFiltrados = useMemo(() => {
+    const termo = buscaAtleta.trim().toLowerCase()
+    const selecionados = new Set(linhas.map((l) => l.estudante_id).filter(Boolean))
+    const disponiveis = atletas.filter((a) => !selecionados.has(a.id))
+    if (!termo) return disponiveis.slice(0, 60)
+    return disponiveis
+      .filter(
+        (a) =>
+          a.nome_completo.toLowerCase().includes(termo) ||
+          (a.turmas?.numero !== undefined && String(a.turmas.numero).includes(termo)),
+      )
+      .slice(0, 60)
+  }, [atletas, buscaAtleta, linhas])
 
   function atualizarLinha(indice: number, campo: keyof Linha, valor: string) {
     setLinhas((ls) => ls.map((l, i) => (i === indice ? { ...l, [campo]: valor } : l)))
@@ -285,13 +371,22 @@ export default function Partidas() {
 
   async function salvarResultado() {
     if (!gerenciando) return
-    const ids = linhas.map((l) => l.turma_id).filter(Boolean)
+    const porAtleta = modoParticipantes === 'atletas'
+    const ids = linhas.map((l) => (porAtleta ? l.estudante_id : l.turma_id)).filter(Boolean)
     if (new Set(ids).size !== ids.length) {
-      setErroPartida('Cada turma pode aparecer apenas uma vez na partida.')
+      setErroPartida(
+        porAtleta
+          ? 'Cada atleta pode aparecer apenas uma vez na partida.'
+          : 'Cada turma pode aparecer apenas uma vez na partida.',
+      )
       return
     }
     if (ids.length === 0) {
-      setErroPartida('Adicione ao menos uma turma.')
+      setErroPartida(porAtleta ? 'Adicione ao menos um atleta.' : 'Adicione ao menos uma turma.')
+      return
+    }
+    if (porAtleta && ehMesa && linhas.length > 4) {
+      setErroPartida('Mesas de baralho, UNO e dominó aceitam até 4 atletas.')
       return
     }
     setSalvandoPartida(true)
@@ -310,6 +405,7 @@ export default function Partidas() {
         const payload = {
           partida_id: gerenciando.id,
           turma_id: l.turma_id,
+          estudante_id: porAtleta ? l.estudante_id || null : null,
           placar: l.placar === '' ? null : Number(l.placar),
           tempo: l.tempo === '' ? null : Number(l.tempo),
           pontuacao: l.pontuacao === '' ? null : Number(l.pontuacao),
@@ -434,7 +530,7 @@ export default function Partidas() {
                 <tr>
                   <Th>Quando / local</Th>
                   <Th>Modalidade</Th>
-                  <Th>Turmas</Th>
+                  <Th>Participantes</Th>
                   <Th>Fase</Th>
                   <Th>Status</Th>
                   <Th className="w-40 text-right">Ações</Th>
@@ -457,13 +553,20 @@ export default function Partidas() {
                       </Td>
                       <Td>
                         {participantes.length === 0 ? (
-                          <span className="text-xs text-amber-700">Sem turmas</span>
+                          <span className="text-xs text-amber-700">Sem participantes</span>
                         ) : (
                           <div className="flex flex-wrap items-center gap-1 text-xs">
                             {participantes.map((pp, idx) => (
                               <span key={pp.id}>
                                 {idx > 0 ? <span className="mx-0.5 text-slate-400">×</span> : null}
-                                <span className="font-medium">{turmaRotulo(pp.turmas)}</span>
+                                <span className="font-medium">
+                                  {pp.estudante_id
+                                    ? pp.estudantes?.nome_completo ?? 'Atleta'
+                                    : turmaRotulo(pp.turmas)}
+                                </span>
+                                {pp.estudante_id && pp.turmas ? (
+                                  <span className="ml-1 text-[10px] text-slate-400">T{pp.turmas.numero}</span>
+                                ) : null}
                                 {pp.placar !== null ? (
                                   <span className="ml-1 rounded bg-slate-100 px-1 tabular-nums">{pp.placar}</span>
                                 ) : null}
@@ -606,7 +709,7 @@ export default function Partidas() {
       <Dialog
         open={gerenciando !== null}
         onClose={() => setGerenciando(null)}
-        titulo="Turmas e resultado"
+        titulo="Participantes e resultado"
         descricao={
           gerenciando
             ? `${gerenciando.modalidade_categorias?.modalidades?.nome ?? ''} · ${
@@ -632,94 +735,194 @@ export default function Partidas() {
           <div className="space-y-3">
             {erroPartida ? <Aviso tom="erro">{erroPartida}</Aviso> : null}
 
-            {linhas.length === 0 ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Participantes
+              </span>
+              <button
+                type="button"
+                onClick={() => alternarModo('turmas')}
+                className={`min-h-9 rounded-lg px-3 text-xs font-semibold ${
+                  modoParticipantes === 'turmas'
+                    ? 'bg-noite-900 text-white'
+                    : 'bg-white text-slate-600 ring-1 ring-slate-200'
+                }`}
+              >
+                Turmas
+              </button>
+              <button
+                type="button"
+                onClick={() => alternarModo('atletas')}
+                className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold ${
+                  modoParticipantes === 'atletas'
+                    ? 'bg-noite-900 text-white'
+                    : 'bg-white text-slate-600 ring-1 ring-slate-200'
+                }`}
+              >
+                <UserRound className="h-3.5 w-3.5" /> Atletas
+              </button>
+            </div>
+
+            {modoParticipantes === 'atletas' && ehMesa ? (
               <Aviso tom="info">
-                Adicione as turmas participantes. Para partidas oficiais, a categoria precisa ter um
-                mínimo de participantes configurado.
+                Mesas de baralho, UNO e dominó: até <strong>4 atletas por partida</strong>. Para a
+                próxima mesa, crie outra partida e selecione os atletas daquela mesa.
               </Aviso>
             ) : null}
 
-            <div className="space-y-3">
-              {linhas.map((l, idx) => (
-                <div key={l.id ?? `nova-${idx}`} className="rounded-xl border border-slate-200 p-3">
-                  <div className="flex flex-wrap items-end gap-2">
-                    <Field label="Turma" className="min-w-[180px] flex-1">
-                      <Select
-                        value={l.turma_id}
-                        onChange={(e) => atualizarLinha(idx, 'turma_id', e.target.value)}
-                      >
-                        <option value="">Selecione…</option>
-                        {turmas.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.numero}
-                            {t.nome_equipe ? ` · ${t.nome_equipe}` : ''}
-                          </option>
-                        ))}
-                      </Select>
-                    </Field>
-                    <Field label="Placar" className="w-20">
-                      <Input
-                        type="number"
-                        value={l.placar}
-                        onChange={(e) => atualizarLinha(idx, 'placar', e.target.value)}
-                      />
-                    </Field>
-                    <Field label="Tempo" className="w-20">
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={l.tempo}
-                        onChange={(e) => atualizarLinha(idx, 'tempo', e.target.value)}
-                      />
-                    </Field>
-                    <Field label="Pontos" className="w-20">
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={l.pontuacao}
-                        onChange={(e) => atualizarLinha(idx, 'pontuacao', e.target.value)}
-                      />
-                    </Field>
-                    <Field label="Posição" className="w-20">
-                      <Input
-                        type="number"
-                        value={l.posicao}
-                        onChange={(e) => atualizarLinha(idx, 'posicao', e.target.value)}
-                      />
-                    </Field>
-                    <Field label="Vencedor" className="w-32">
-                      <Select
-                        value={l.vencedor}
-                        onChange={(e) => atualizarLinha(idx, 'vencedor', e.target.value)}
-                      >
-                        <option value="">—</option>
-                        <option value="sim">Sim</option>
-                        <option value="nao">Não</option>
-                      </Select>
-                    </Field>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      aria-label="Remover turma"
-                      onClick={() => removerLinha(idx)}
-                    >
-                      <Trash2 className="h-4 w-4 text-red-600" />
-                    </Button>
-                  </div>
-                  <Field label="Observação" className="mt-2">
-                    <Input
-                      value={l.observacao}
-                      onChange={(e) => atualizarLinha(idx, 'observacao', e.target.value)}
-                      placeholder="Opcional"
-                    />
-                  </Field>
+            {linhas.length === 0 ? (
+              <Aviso tom="info">
+                {modoParticipantes === 'atletas'
+                  ? 'Busque e adicione os atletas que vão competir. O portal passa a mostrar contra quem cada um joga.'
+                  : 'Adicione as turmas participantes. Para partidas oficiais, a categoria precisa ter um mínimo de participantes configurado.'}
+              </Aviso>
+            ) : null}
+
+            {modoParticipantes === 'atletas' ? (
+              <div className="rounded-xl border border-slate-200 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-slate-800">
+                    Atletas na partida ({linhas.length}{ehMesa ? ' / 4' : ''})
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => setPickerAberto((v) => !v)}>
+                    <Search className="h-4 w-4" /> {pickerAberto ? 'Fechar busca' : 'Buscar atleta'}
+                  </Button>
                 </div>
-              ))}
+                {pickerAberto ? (
+                  <div className="mt-3 border-t border-slate-100 pt-3">
+                    <Input
+                      value={buscaAtleta}
+                      onChange={(e) => setBuscaAtleta(e.target.value)}
+                      placeholder="Buscar por nome ou número da turma"
+                      autoFocus
+                    />
+                    <div className="scrollbar-thin mt-2 max-h-56 space-y-0.5 overflow-y-auto rounded-lg border border-slate-200">
+                      {atletasFiltrados.length === 0 ? (
+                        <p className="p-3 text-xs text-slate-500">Nenhum atleta disponível.</p>
+                      ) : (
+                        atletasFiltrados.map((a) => (
+                          <button
+                            key={a.id}
+                            type="button"
+                            onClick={() => adicionarAtleta(a.id)}
+                            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                          >
+                            <span className="truncate text-slate-800">{a.nome_completo}</span>
+                            <span className="shrink-0 text-[11px] font-medium text-slate-500">
+                              Turma {a.turmas?.numero ?? '—'}
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="space-y-3">
+              {linhas.map((l, idx) => {
+                const atleta = modoParticipantes === 'atletas'
+                  ? atletas.find((a) => a.id === l.estudante_id)
+                  : undefined
+                const numeroTurma = atleta?.turmas?.numero ?? turmas.find((t) => t.id === l.turma_id)?.numero
+                return (
+                  <div key={l.id ?? `nova-${idx}`} className="rounded-xl border border-slate-200 p-3">
+                    <div className="flex flex-wrap items-end gap-2">
+                      {modoParticipantes === 'atletas' ? (
+                        <Field label="Atleta" className="min-w-[220px] flex-1">
+                          <div className="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm">
+                            <UserRound className="h-4 w-4 shrink-0 text-slate-400" />
+                            <span className="truncate font-medium text-slate-800">
+                              {atleta?.nome_completo ?? 'Atleta'}
+                            </span>
+                            <span className="ml-auto shrink-0 rounded bg-white px-1.5 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200">
+                              T{numeroTurma ?? '—'}
+                            </span>
+                          </div>
+                        </Field>
+                      ) : (
+                        <Field label="Turma" className="min-w-[180px] flex-1">
+                          <Select
+                            value={l.turma_id}
+                            onChange={(e) => atualizarLinha(idx, 'turma_id', e.target.value)}
+                          >
+                            <option value="">Selecione…</option>
+                            {turmas.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.numero}
+                                {t.nome_equipe ? ` · ${t.nome_equipe}` : ''}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+                      )}
+                      <Field label="Placar" className="w-20">
+                        <Input
+                          type="number"
+                          value={l.placar}
+                          onChange={(e) => atualizarLinha(idx, 'placar', e.target.value)}
+                        />
+                      </Field>
+                      <Field label="Tempo" className="w-20">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={l.tempo}
+                          onChange={(e) => atualizarLinha(idx, 'tempo', e.target.value)}
+                        />
+                      </Field>
+                      <Field label="Pontos" className="w-20">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={l.pontuacao}
+                          onChange={(e) => atualizarLinha(idx, 'pontuacao', e.target.value)}
+                        />
+                      </Field>
+                      <Field label="Posição" className="w-20">
+                        <Input
+                          type="number"
+                          value={l.posicao}
+                          onChange={(e) => atualizarLinha(idx, 'posicao', e.target.value)}
+                        />
+                      </Field>
+                      <Field label="Vencedor" className="w-32">
+                        <Select
+                          value={l.vencedor}
+                          onChange={(e) => atualizarLinha(idx, 'vencedor', e.target.value)}
+                        >
+                          <option value="">—</option>
+                          <option value="sim">Sim</option>
+                          <option value="nao">Não</option>
+                        </Select>
+                      </Field>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={modoParticipantes === 'atletas' ? 'Remover atleta' : 'Remover turma'}
+                        onClick={() => removerLinha(idx)}
+                      >
+                        <Trash2 className="h-4 w-4 text-red-600" />
+                      </Button>
+                    </div>
+                    <Field label="Observação" className="mt-2">
+                      <Input
+                        value={l.observacao}
+                        onChange={(e) => atualizarLinha(idx, 'observacao', e.target.value)}
+                        placeholder="Opcional"
+                      />
+                    </Field>
+                  </div>
+                )
+              })}
             </div>
 
-            <Button variant="outline" onClick={adicionarLinha} disabled={linhas.length >= turmas.length}>
-              <Plus className="h-4 w-4" /> Adicionar turma
-            </Button>
+            {modoParticipantes === 'turmas' ? (
+              <Button variant="outline" onClick={adicionarLinha} disabled={linhas.length >= turmas.length}>
+                <Plus className="h-4 w-4" /> Adicionar turma
+              </Button>
+            ) : null}
           </div>
         ) : null}
       </Dialog>
