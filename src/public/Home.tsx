@@ -10,7 +10,6 @@ import {
   Newspaper,
   Sparkles,
   Trophy,
-  UserRound,
 } from 'lucide-react'
 import { useAsync } from '@/lib/useAsync'
 import { supabase } from '@/lib/supabase'
@@ -22,13 +21,13 @@ import type {
   TacaPublica,
 } from '@/lib/types'
 import { cfgTexto, useConfig, useContagem, useRealtime, useSeo } from './hooks'
+import { ParticipantesPartida } from './ParticipantesPartida'
 import { usePwaInstall } from './usePwaInstall'
 import {
   agruparResultados,
   dataCurta,
   diaSemanaCurto,
   horaCurta,
-  nomeTurma,
   periodoEvento,
   tituloCategoria,
 } from './utils'
@@ -273,23 +272,8 @@ export default function Home() {
                   <StatusBadge status={jogo.status} />
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  {jogo.atletas.length > 0 ? (
-                    jogo.atletas.map((nome, i) => (
-                      <span key={`${nome}-${i}`} className="inline-flex items-center gap-1.5 rounded-lg bg-areia-100 px-2 py-1 text-xs font-medium text-slate-600">
-                        <UserRound className="h-3.5 w-3.5 text-brand-700" /> {nome}
-                      </span>
-                    ))
-                  ) : jogo.turmas.length > 0 ? (
-                    jogo.turmas.map((numero) => (
-                      <span key={numero} className="inline-flex items-center gap-1.5 rounded-lg bg-areia-100 px-2 py-1">
-                        <NumeroTurma numero={numero} className="h-7 min-w-7 text-base" />
-                        <span className="pr-1 text-xs font-medium text-slate-600">{nomeTurma({ numero })}</span>
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-xs text-slate-500">Participantes a definir</span>
-                  )}
+                <div className="mt-3">
+                  <ParticipantesPartida jogo={jogo} compacto />
                 </div>
 
                 <p className="mt-3 text-xs text-slate-500">

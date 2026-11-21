@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { FORMATOS, TIPOS_MODALIDADE } from '@/lib/constantes'
 import type { Categoria, Documento, Modalidade, ParticipantePublico, Programacao } from '@/lib/types'
 import { useRealtime, useSeo } from './hooks'
+import { ParticipantesPartida } from './ParticipantesPartida'
 import { dataCurta, horaCurta, rotuloCategoria, tituloCategoria } from './utils'
 import {
   Card,
@@ -198,13 +199,9 @@ export default function ModalidadePublica() {
                     <p className="mt-1 text-xs text-slate-600">
                       <CalendarDays className="mb-0.5 inline h-3.5 w-3.5" /> {dataCurta(jogo.data_hora)} · {horaCurta(jogo.data_hora)}
                     </p>
-                    <p className="mt-1 text-xs text-slate-600">
-                      {jogo.atletas.length > 0
-                        ? jogo.atletas.join(' × ')
-                        : jogo.turmas.length > 0
-                          ? jogo.turmas.map((n) => `Turma ${n}`).join(' × ')
-                          : 'Participantes a definir'}
-                    </p>
+                    <div className="mt-2">
+                      <ParticipantesPartida jogo={jogo} compacto />
+                    </div>
                     <p className="mt-1 text-[11px] text-slate-500">
                       <MapPin className="mb-0.5 inline h-3.5 w-3.5" /> {jogo.local ?? 'Local a definir'}
                     </p>

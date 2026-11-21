@@ -120,8 +120,9 @@ export interface Partida {
   observacoes: string | null
   modalidade_categorias?: {
     nome: string
+    formato_resultado?: FormatoResultado
     min_participantes_partida: number | null
-    modalidades: { id: string; nome: string } | null
+    modalidades: { id: string; nome: string; tipo?: TipoModalidade; slug?: string } | null
   } | null
   locais?: { nome: string } | null
   partida_participantes?: PartidaParticipante[]
@@ -322,6 +323,18 @@ export interface TacaPublica {
   formula_completa: boolean
 }
 
+export interface ParticipanteProgramacao {
+  tipo: 'atleta' | 'turma'
+  nome: string
+  turma_numero: number
+  turma_equipe: string | null
+  placar: number | null
+  tempo: number | null
+  pontuacao: number | null
+  posicao: number | null
+  vencedor: boolean | null
+}
+
 export interface Programacao {
   id: string
   data_hora: string | null
@@ -336,8 +349,9 @@ export interface Programacao {
   formato_resultado: FormatoResultado
   local: string | null
   turmas: number[]
-  modalidade_tipo: TipoModalidade
-  atletas: string[]
+  modalidade_tipo?: TipoModalidade
+  atletas?: string[]
+  participantes?: ParticipanteProgramacao[]
 }
 
 export interface ResultadoPublico {

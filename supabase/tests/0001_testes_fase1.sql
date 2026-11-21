@@ -715,6 +715,88 @@ begin
 end
 $$;
 
+-- ---------------------------------------------------------------------
+-- 0013: limites de mesa (4 atletas), confronto individual (2) e detalhes
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_cat_baralho uuid;
+  v_cat_xadrez  uuid;
+  v_mesa        uuid;
+  v_confronto   uuid;
+  v_atletas     uuid[];
+  v_bloqueou5   boolean := false;
+  v_bloqueou3   boolean := false;
+  v_part_json   jsonb;
+begin
+  select mc.id into v_cat_baralho
+  from public.modalidade_categorias mc
+  join public.modalidades m on m.id = mc.modalidade_id
+  where m.slug = 'baralho' and mc.nome = 'Única';
+
+  select mc.id into v_cat_xadrez
+  from public.modalidade_categorias mc
+  join public.modalidades m on m.id = mc.modalidade_id
+  where m.slug = 'xadrez' and mc.nome = 'Masculino';
+
+  select array_agg(id) into v_atletas
+  from (
+    select id from public.estudantes order by nome_completo limit 5
+  ) s;
+
+  if v_cat_baralho is null or v_cat_xadrez is null or array_length(v_atletas, 1) < 5 then
+    raise exception 'FALHOU: dados insuficientes para testar mesa e confronto individual.';
+  end if;
+
+  -- Mesa de Baralho: 4 atletas aceitos, 5º bloqueado
+  insert into public.partidas (modalidade_categoria_id, fase, status)
+  values (v_cat_baralho, 'classificatoria', 'programado') returning id into v_mesa;
+
+  insert into public.partida_participantes (partida_id, estudante_id)
+  values (v_mesa, v_atletas[1]), (v_mesa, v_atletas[2]), (v_mesa, v_atletas[3]), (v_mesa, v_atletas[4]);
+
+  begin
+    insert into public.partida_participantes (partida_id, estudante_id)
+    values (v_mesa, v_atletas[5]);
+  exception when others then
+    if position('no máximo 4 atletas' in sqlerrm) > 0 then
+      v_bloqueou5 := true;
+    else
+      raise;
+    end if;
+  end;
+  if not v_bloqueou5 then
+    raise exception 'FALHOU: mesa de Baralho aceitou 5º atleta.';
+  end if;
+
+  select participantes into v_part_json from public.vw_programacao where id = v_mesa;
+  if jsonb_array_length(v_part_json) <> 4 then
+    raise exception 'FALHOU: vw_programacao.participantes deveria ter 4 atletas na mesa.';
+  end if;
+
+  -- Confronto individual (Xadrez): 2 atletas aceitos, 3º bloqueado
+  insert into public.partidas (modalidade_categoria_id, fase, status)
+  values (v_cat_xadrez, 'classificatoria', 'programado') returning id into v_confronto;
+
+  insert into public.partida_participantes (partida_id, estudante_id)
+  values (v_confronto, v_atletas[1]), (v_confronto, v_atletas[2]);
+
+  begin
+    insert into public.partida_participantes (partida_id, estudante_id)
+    values (v_confronto, v_atletas[3]);
+  exception when others then
+    if position('no máximo 2 atletas' in sqlerrm) > 0 then
+      v_bloqueou3 := true;
+    else
+      raise;
+    end if;
+  end;
+  if not v_bloqueou3 then
+    raise exception 'FALHOU: confronto individual de Xadrez aceitou 3º atleta.';
+  end if;
+end
+$$;
+
 rollback;
 
 \echo 'TODOS OS TESTES DE BANCO DA FASE 1 PASSARAM'

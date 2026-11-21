@@ -1,16 +1,16 @@
 import { useMemo, useState } from 'react'
-import { CalendarDays, Clock, MapPin, UserRound } from 'lucide-react'
+import { CalendarDays, Clock, MapPin } from 'lucide-react'
 import { useAsync } from '@/lib/useAsync'
 import { supabase } from '@/lib/supabase'
 import type { Programacao as Jogo } from '@/lib/types'
 import { useRealtime, useSeo } from './hooks'
-import { chaveDia, dataCurta, dataLonga, diaSemanaCurto, horaCurta, nomeTurma, rotuloFase, tituloCategoria } from './utils'
+import { ParticipantesPartida } from './ParticipantesPartida'
+import { chaveDia, dataCurta, dataLonga, diaSemanaCurto, horaCurta, rotuloFase, tituloCategoria } from './utils'
 import {
   Card,
   CarregandoPublico,
   Container,
   ErroPublico,
-  NumeroTurma,
   PageHero,
   StatusBadge,
   Vazio,
@@ -184,25 +184,8 @@ export default function Programacao() {
                             <StatusBadge status={jogo.status} />
                           </div>
 
-                          <div className="mt-3 flex flex-wrap items-center gap-2">
-                            {jogo.atletas.length > 0 ? (
-                              <>
-                                {jogo.atletas.map((nome, i) => (
-                                  <span key={`${nome}-${i}`} className="inline-flex items-center gap-1.5 rounded-lg bg-areia-100 px-2 py-1 text-xs font-medium text-slate-700">
-                                    <UserRound className="h-3.5 w-3.5 text-brand-700" /> {nome}
-                                  </span>
-                                ))}
-                              </>
-                            ) : jogo.turmas.length > 0 ? (
-                              jogo.turmas.map((numero) => (
-                                <span key={numero} className="inline-flex items-center gap-1.5 rounded-lg bg-areia-100 py-1 pl-1 pr-2">
-                                  <NumeroTurma numero={numero} className="h-7 min-w-7 text-sm" />
-                                  <span className="text-xs font-medium text-slate-700">{nomeTurma({ numero })}</span>
-                                </span>
-                              ))
-                            ) : (
-                              <span className="text-xs text-slate-500">Participantes a definir</span>
-                            )}
+                          <div className="mt-3">
+                            <ParticipantesPartida jogo={jogo} />
                           </div>
 
                           <p className="mt-2.5 flex items-center gap-1.5 text-xs text-slate-500">

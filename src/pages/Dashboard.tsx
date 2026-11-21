@@ -10,6 +10,7 @@ import {
   Users,
 } from 'lucide-react'
 import { Badge, Card, CardHeader, Carregando, ErroBox, PageHeader } from '@/components/ui'
+import { ehErroRelacaoEstudantes } from '@/lib/partidasFormato'
 import { supabase } from '@/lib/supabase'
 import { useAsync } from '@/lib/useAsync'
 import { formatarDataHora, turmaRotulo } from '@/lib/format'
@@ -19,9 +20,40 @@ type ProximaPartida = {
   id: string
   data_hora: string | null
   fase: string
-  modalidade_categorias: { nome: string; modalidades: { nome: string } | null } | null
+  modalidade_categorias: { nome: string; modalidades: { nome: string; slug?: string } | null } | null
   locais: { nome: string } | null
-  partida_participantes: { turmas: { numero: number; nome_equipe: string | null } | null }[]
+  partida_participantes: {
+    estudante_id?: string | null
+    turmas: { numero: number; nome_equipe: string | null } | null
+    estudantes?: { nome_completo: string } | null
+  }[]
+}
+
+async function carregarProximasPartidas() {
+  const agora = new Date().toISOString()
+  const completa = await supabase
+    .from('partidas')
+    .select(
+      'id, data_hora, fase, modalidade_categorias(nome, modalidades(nome, slug)), locais(nome), partida_participantes(estudante_id, turmas(numero, nome_equipe), estudantes(nome_completo))',
+    )
+    .gte('data_hora', agora)
+    .in('status', ['programado', 'em_andamento'])
+    .order('data_hora', { ascending: true })
+    .limit(5)
+
+  if (!completa.error || !ehErroRelacaoEstudantes(completa.error)) {
+    return completa
+  }
+
+  return supabase
+    .from('partidas')
+    .select(
+      'id, data_hora, fase, modalidade_categorias(nome, modalidades(nome, slug)), locais(nome), partida_participantes(turmas(numero, nome_equipe))',
+    )
+    .gte('data_hora', agora)
+    .in('status', ['programado', 'em_andamento'])
+    .order('data_hora', { ascending: true })
+    .limit(5)
 }
 
 async function carregarResumo() {
@@ -55,15 +87,7 @@ async function carregarResumo() {
       .from('resultados')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'oficial'),
-    supabase
-      .from('partidas')
-      .select(
-        'id, data_hora, fase, modalidade_categorias(nome, modalidades(nome)), locais(nome), partida_participantes(turmas(numero, nome_equipe))',
-      )
-      .gte('data_hora', new Date().toISOString())
-      .in('status', ['programado', 'em_andamento'])
-      .order('data_hora', { ascending: true })
-      .limit(5),
+    carregarProximasPartidas(),
     supabase
       .from('modalidade_categorias')
       .select('id, nome, modalidades(nome)')
@@ -189,8 +213,12 @@ export default function Dashboard() {
           ) : (
             <ul className="divide-y divide-slate-100">
               {data.proximas.map((p) => {
-                const turmas = (p.partida_participantes ?? [])
-                  .map((pp) => turmaRotulo(pp.turmas))
+                const participantes = (p.partida_participantes ?? [])
+                  .map((pp) =>
+                    pp.estudante_id
+                      ? `${pp.estudantes?.nome_completo ?? 'Atleta'}${pp.turmas ? ` (T${pp.turmas.numero})` : ''}`
+                      : turmaRotulo(pp.turmas),
+                  )
                   .join(' × ')
                 return (
                   <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-5">
@@ -200,7 +228,7 @@ export default function Dashboard() {
                         {p.modalidade_categorias?.nome ?? 'Categoria'}
                       </p>
                       <p className="mt-0.5 text-xs text-slate-500">
-                        {turmas || 'Turmas ainda não definidas'}
+                        {participantes || 'Participantes ainda não definidos'}
                         {p.locais?.nome ? ` · ${p.locais.nome}` : ''}
                       </p>
                     </div>

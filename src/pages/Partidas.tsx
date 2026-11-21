@@ -3,14 +3,16 @@ import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
   CalendarDays,
+  LayoutGrid,
   Pencil,
   Plus,
-  Search,
   Swords,
   Trash2,
   Trophy,
   UserRound,
+  Users,
 } from 'lucide-react'
+import { SeletorAtleta, type AtletaOpcao } from '@/components/SeletorAtleta'
 import {
   Aviso,
   Badge,
@@ -34,6 +36,13 @@ import {
 import { FASES, ROTULO_FASE, STATUS_PARTIDA } from '@/lib/constantes'
 import { mensagemErro } from '@/lib/errors'
 import { deInputDataHora, formatarDataHora, paraInputDataHora, turmaRotulo } from '@/lib/format'
+import {
+  ehErroRelacaoEstudantes,
+  formatoPartidaDe,
+  INFO_FORMATO_PARTIDA,
+  validarParticipantesPartida,
+  type FormatoPartida,
+} from '@/lib/partidasFormato'
 import { supabase } from '@/lib/supabase'
 import { useAsync } from '@/lib/useAsync'
 import type {
@@ -57,14 +66,10 @@ type Linha = {
   observacao: string
 }
 
-type AtletaOpcao = {
-  id: string
-  nome_completo: string
+type SlotParticipante = {
   turma_id: string
-  turmas?: { numero: number } | null
+  estudante_id: string
 }
-
-const MODALIDADES_MESA = ['uno', 'baralho', 'domino']
 
 type Conflito = {
   tipo: string
@@ -93,6 +98,35 @@ const VAZIO: Formulario = {
   observacoes: '',
 }
 
+const SELECT_PARTIDA_COMPLETA =
+  '*, modalidade_categorias(nome, formato_resultado, min_participantes_partida, modalidades(id, nome, tipo, slug)), locais(nome), partida_participantes(*, turmas(numero, nome_equipe), estudantes(nome_completo))'
+
+const SELECT_PARTIDA_LEGADO =
+  '*, modalidade_categorias(nome, formato_resultado, min_participantes_partida, modalidades(id, nome, tipo, slug)), locais(nome), partida_participantes(*, turmas(numero, nome_equipe))'
+
+function linhaVazia(turma_id = '', estudante_id = ''): Linha {
+  return {
+    turma_id,
+    estudante_id,
+    placar: '',
+    tempo: '',
+    pontuacao: '',
+    posicao: '',
+    vencedor: '',
+    observacao: '',
+  }
+}
+
+function slotsIniciaisPara(formato: FormatoPartida): SlotParticipante[] {
+  if (formato === 'mesa') {
+    return Array.from({ length: 4 }, () => ({ turma_id: '', estudante_id: '' }))
+  }
+  return [
+    { turma_id: '', estudante_id: '' },
+    { turma_id: '', estudante_id: '' },
+  ]
+}
+
 function BadgePartida({ status }: { status: StatusPartida }) {
   const tom = {
     programado: 'azul',
@@ -103,6 +137,35 @@ function BadgePartida({ status }: { status: StatusPartida }) {
     cancelado: 'vermelho',
   }[status] as 'azul' | 'ambar' | 'verde' | 'cinza' | 'roxo' | 'vermelho'
   return <Badge tom={tom}>{STATUS_PARTIDA.find((s) => s.valor === status)?.rotulo ?? status}</Badge>
+}
+
+function BadgeFormato({ formato }: { formato: FormatoPartida }) {
+  if (formato === 'mesa') {
+    return (
+      <Badge tom="roxo">
+        <LayoutGrid className="h-3 w-3" /> Mesa (até 4)
+      </Badge>
+    )
+  }
+  if (formato === 'individual_confronto') {
+    return (
+      <Badge tom="azul">
+        <UserRound className="h-3 w-3" /> Individual 1×1
+      </Badge>
+    )
+  }
+  if (formato === 'individual_bateria') {
+    return (
+      <Badge tom="ambar">
+        <UserRound className="h-3 w-3" /> Bateria individual
+      </Badge>
+    )
+  }
+  return (
+    <Badge tom="cinza">
+      <Users className="h-3 w-3" /> Coletiva / equipes
+    </Badge>
+  )
 }
 
 function linhaDe(p: PartidaParticipante): Linha {
@@ -123,9 +186,10 @@ export default function Partidas() {
   const { notificar } = useToast()
   const [statusFiltro, setStatusFiltro] = useState<'todas' | StatusPartida>('todas')
   const [dataFiltro, setDataFiltro] = useState('')
+  const [schemaAtletasPendente, setSchemaAtletasPendente] = useState(false)
 
   const aux = useAsync(async () => {
-    const [cats, turmas, locais, alunos] = await Promise.all([
+    const [cats, turmasRes, locaisRes, alunosRes, inscsRes] = await Promise.all([
       supabase
         .from('modalidade_categorias')
         .select('*, modalidades(id, nome, tipo, slug)')
@@ -135,45 +199,79 @@ export default function Partidas() {
       supabase.from('locais').select('*').eq('ativo', true).order('ordem', { nullsFirst: false }),
       supabase
         .from('estudantes')
-        .select('id, nome_completo, turma_id, turmas(numero)')
+        .select('id, nome_completo, turma_id, turmas(numero, nome_equipe)')
         .eq('ativo', true)
         .order('nome_completo'),
+      supabase
+        .from('inscricoes')
+        .select('modalidade_categoria_id, inscricao_participantes(estudante_id)')
+        .in('status', ['pendente', 'aprovada']),
     ])
     if (cats.error) throw cats.error
-    if (turmas.error) throw turmas.error
-    if (locais.error) throw locais.error
-    if (alunos.error) throw alunos.error
+    if (turmasRes.error) throw turmasRes.error
+    if (locaisRes.error) throw locaisRes.error
+    if (alunosRes.error) throw alunosRes.error
+
+    const inscritosPorCategoria = new Map<string, Set<string>>()
+    if (!inscsRes.error && inscsRes.data) {
+      for (const insc of inscsRes.data as unknown as {
+        modalidade_categoria_id: string
+        inscricao_participantes?: { estudante_id: string }[]
+      }[]) {
+        const conjunto = inscritosPorCategoria.get(insc.modalidade_categoria_id) ?? new Set<string>()
+        for (const p of insc.inscricao_participantes ?? []) {
+          if (p.estudante_id) conjunto.add(p.estudante_id)
+        }
+        inscritosPorCategoria.set(insc.modalidade_categoria_id, conjunto)
+      }
+    }
+
     return {
       categorias: cats.data as CategoriaComModalidade[],
-      turmas: turmas.data as Turma[],
-      locais: locais.data as Local[],
-      atletas: (alunos.data ?? []) as unknown as AtletaOpcao[],
+      turmas: turmasRes.data as Turma[],
+      locais: locaisRes.data as Local[],
+      atletas: (alunosRes.data ?? []) as unknown as AtletaOpcao[],
+      inscritosPorCategoria,
     }
   })
 
   const lista = useAsync(async () => {
-    let q = supabase
-      .from('partidas')
-      .select(
-        '*, modalidade_categorias(nome, min_participantes_partida, modalidades(id, nome)), locais(nome), partida_participantes(*, turmas(numero, nome_equipe), estudantes(nome_completo))',
-      )
-      .order('data_hora', { ascending: true, nullsFirst: false })
-      .order('created_at')
-    if (statusFiltro !== 'todas') q = q.eq('status', statusFiltro)
-    if (dataFiltro) {
-      q = q
-        .gte('data_hora', new Date(`${dataFiltro}T00:00:00`).toISOString())
-        .lte('data_hora', new Date(`${dataFiltro}T23:59:59.999`).toISOString())
+    const montarQuery = (selectExpr: string) => {
+      let q = supabase
+        .from('partidas')
+        .select(selectExpr)
+        .order('data_hora', { ascending: true, nullsFirst: false })
+        .order('created_at')
+      if (statusFiltro !== 'todas') q = q.eq('status', statusFiltro)
+      if (dataFiltro) {
+        q = q
+          .gte('data_hora', new Date(`${dataFiltro}T00:00:00`).toISOString())
+          .lte('data_hora', new Date(`${dataFiltro}T23:59:59.999`).toISOString())
+      }
+      return q
     }
-    const { data, error } = await q
-    if (error) throw error
-    return data as unknown as Partida[]
+
+    const res = await montarQuery(SELECT_PARTIDA_COMPLETA)
+    if (!res.error) {
+      setSchemaAtletasPendente(false)
+      return (res.data ?? []) as unknown as Partida[]
+    }
+
+    if (ehErroRelacaoEstudantes(res.error)) {
+      setSchemaAtletasPendente(true)
+      const fallback = await montarQuery(SELECT_PARTIDA_LEGADO)
+      if (fallback.error) throw fallback.error
+      return (fallback.data ?? []) as unknown as Partida[]
+    }
+
+    throw res.error
   }, [statusFiltro, dataFiltro])
 
   const categorias = aux.data?.categorias ?? []
   const turmas = aux.data?.turmas ?? []
   const locais = aux.data?.locais ?? []
   const atletas = aux.data?.atletas ?? []
+  const inscritosPorCategoria = aux.data?.inscritosPorCategoria ?? new Map<string, Set<string>>()
 
   const gruposCategorias = useMemo(() => {
     const mapa = new Map<string, { nome: string; itens: CategoriaComModalidade[] }>()
@@ -188,6 +286,7 @@ export default function Partidas() {
 
   const [editando, setEditando] = useState<Partida | 'nova' | null>(null)
   const [form, setForm] = useState<Formulario>(VAZIO)
+  const [slotsCriacao, setSlotsCriacao] = useState<SlotParticipante[]>([])
   const [salvando, setSalvando] = useState(false)
   const [erroForm, setErroForm] = useState<string | null>(null)
 
@@ -195,9 +294,6 @@ export default function Partidas() {
   const [linhas, setLinhas] = useState<Linha[]>([])
   const [salvandoPartida, setSalvandoPartida] = useState(false)
   const [erroPartida, setErroPartida] = useState<string | null>(null)
-  const [modoParticipantes, setModoParticipantes] = useState<'turmas' | 'atletas'>('turmas')
-  const [pickerAberto, setPickerAberto] = useState(false)
-  const [buscaAtleta, setBuscaAtleta] = useState('')
 
   const [excluindo, setExcluindo] = useState<Partida | null>(null)
   const [removendo, setRemovendo] = useState(false)
@@ -205,10 +301,37 @@ export default function Partidas() {
   const [conflitos, setConflitos] = useState<Conflito[] | null>(null)
   const [carregandoConflitos, setCarregandoConflitos] = useState(false)
 
+  const categoriaForm = useMemo(
+    () => categorias.find((c) => c.id === form.modalidade_categoria_id) ?? null,
+    [categorias, form.modalidade_categoria_id],
+  )
+  const formatoForm = useMemo(() => formatoPartidaDe(categoriaForm), [categoriaForm])
+  const infoFormatoForm = INFO_FORMATO_PARTIDA[formatoForm]
+  const inscritosCategoriaForm = categoriaForm
+    ? inscritosPorCategoria.get(categoriaForm.id)
+    : undefined
+
+  const categoriaGerenciando = useMemo(
+    () =>
+      gerenciando
+        ? categorias.find((c) => c.id === gerenciando.modalidade_categoria_id) ?? null
+        : null,
+    [categorias, gerenciando],
+  )
+  const formatoGerenciando = useMemo(
+    () => formatoPartidaDe(categoriaGerenciando),
+    [categoriaGerenciando],
+  )
+  const infoFormatoGerenciando = INFO_FORMATO_PARTIDA[formatoGerenciando]
+  const inscritosCategoriaGerenciando = categoriaGerenciando
+    ? inscritosPorCategoria.get(categoriaGerenciando.id)
+    : undefined
+
   function abrir(p: Partida | 'nova') {
     setErroForm(null)
     if (p === 'nova') {
       setForm(VAZIO)
+      setSlotsCriacao([])
       setEditando('nova')
       return
     }
@@ -221,7 +344,36 @@ export default function Partidas() {
       status: p.status,
       observacoes: p.observacoes ?? '',
     })
+    setSlotsCriacao([])
     setEditando(p)
+  }
+
+  function aoTrocarCategoriaForm(categoriaId: string) {
+    setForm((atual) => ({ ...atual, modalidade_categoria_id: categoriaId }))
+    setErroForm(null)
+    if (editando !== 'nova') return
+    if (!categoriaId) {
+      setSlotsCriacao([])
+      return
+    }
+    const cat = categorias.find((c) => c.id === categoriaId) ?? null
+    setSlotsCriacao(slotsIniciaisPara(formatoPartidaDe(cat)))
+  }
+
+  function atualizarSlotCriacao(indice: number, novo: SlotParticipante) {
+    setErroForm(null)
+    setSlotsCriacao((atuais) => atuais.map((s, i) => (i === indice ? novo : s)))
+  }
+
+  function adicionarSlotCriacao() {
+    if (infoFormatoForm.maxParticipantes && slotsCriacao.length >= infoFormatoForm.maxParticipantes) {
+      return
+    }
+    setSlotsCriacao((atuais) => [...atuais, { turma_id: '', estudante_id: '' }])
+  }
+
+  function removerSlotCriacao(indice: number) {
+    setSlotsCriacao((atuais) => atuais.filter((_, i) => i !== indice))
   }
 
   async function salvar() {
@@ -236,6 +388,28 @@ export default function Partidas() {
       )
       return
     }
+
+    const formato = formatoPartidaDe(categoria)
+    const infoFormato = INFO_FORMATO_PARTIDA[formato]
+    const participantesPreenchidos =
+      editando === 'nova'
+        ? slotsCriacao.filter((s) => (infoFormato.usaAtletas ? Boolean(s.estudante_id) : Boolean(s.turma_id)))
+        : []
+
+    if (editando === 'nova') {
+      const erroValidacao = validarParticipantesPartida(formato, slotsCriacao, { permitirVazio: true })
+      if (erroValidacao) {
+        setErroForm(erroValidacao)
+        return
+      }
+      if (infoFormato.usaAtletas && participantesPreenchidos.length > 0 && schemaAtletasPendente) {
+        setErroForm(
+          'O banco Supabase ainda não tem a coluna estudante_id em partida_participantes. Aplique as migrations 0012_partidas_atletas.sql e 0013_partidas_formatos_validacoes.sql no SQL Editor antes de vincular atletas.',
+        )
+        return
+      }
+    }
+
     setSalvando(true)
     setErroForm(null)
     const payload = {
@@ -247,21 +421,68 @@ export default function Partidas() {
       status: form.status,
       observacoes: form.observacoes.trim() || null,
     }
+
     try {
       if (editando === 'nova') {
         const { data, error } = await supabase.from('partidas').insert(payload).select('id').single()
         if (error) throw error
+
+        if (participantesPreenchidos.length > 0) {
+          const registros = participantesPreenchidos.map((p) => {
+            if (infoFormato.usaAtletas) {
+              const atleta = atletas.find((a) => a.id === p.estudante_id)
+              return {
+                partida_id: data.id,
+                turma_id: atleta?.turma_id ?? p.turma_id,
+                estudante_id: p.estudante_id,
+              }
+            }
+            return {
+              partida_id: data.id,
+              turma_id: p.turma_id,
+              ...(schemaAtletasPendente ? {} : { estudante_id: null }),
+            }
+          })
+
+          const { error: erroPart } = await supabase.from('partida_participantes').insert(registros)
+          if (erroPart) {
+            await supabase.from('partidas').delete().eq('id', data.id)
+            throw erroPart
+          }
+
+          const mensagemSucesso =
+            formato === 'mesa'
+              ? `Mesa criada com ${registros.length} atletas.`
+              : formato === 'individual_confronto'
+                ? 'Confronto individual criado com sucesso.'
+                : formato === 'individual_bateria'
+                  ? `Bateria individual criada com ${registros.length} atleta(s).`
+                  : 'Partida criada com sucesso.'
+          notificar(mensagemSucesso)
+          setEditando(null)
+          lista.reload()
+          return
+        }
+
+        const selectUsado = schemaAtletasPendente ? SELECT_PARTIDA_LEGADO : SELECT_PARTIDA_COMPLETA
         const { data: completa } = await supabase
           .from('partidas')
-          .select(
-            '*, modalidade_categorias(nome, min_participantes_partida, modalidades(id, nome)), locais(nome), partida_participantes(*, turmas(numero, nome_equipe), estudantes(nome_completo))',
-          )
+          .select(selectUsado)
           .eq('id', data.id)
           .single()
-        notificar('Partida criada. Agora defina as turmas e o resultado.')
+
+        notificar(
+          formato === 'mesa'
+            ? 'Mesa criada. Agora selecione os atletas da mesa.'
+            : infoFormato.usaAtletas
+              ? 'Partida criada. Agora selecione os atletas participantes.'
+              : 'Partida criada. Agora defina as turmas e o resultado.',
+        )
         setEditando(null)
         lista.reload()
-        abrirResultado((completa ?? data) as unknown as Partida)
+        if (completa) {
+          abrirResultado(completa as unknown as Partida)
+        }
       } else if (editando) {
         const { error } = await supabase.from('partidas').update(payload).eq('id', editando.id)
         if (error) throw error
@@ -277,135 +498,124 @@ export default function Partidas() {
   }
 
   function abrirResultado(p: Partida) {
-    const categoria = categorias.find((c) => c.id === p.modalidade_categoria_id)
-    setModoParticipantes(categoria?.modalidades?.tipo === 'individual' ? 'atletas' : 'turmas')
-    setPickerAberto(false)
-    setBuscaAtleta('')
+    const cat = categorias.find((c) => c.id === p.modalidade_categoria_id) ?? null
+    const formato = formatoPartidaDe(cat)
+    const atuais = (p.partida_participantes ?? []).map(linhaDe)
+
+    let iniciais = atuais
+    if (iniciais.length === 0) {
+      if (formato === 'individual_confronto') {
+        iniciais = [linhaVazia(), linhaVazia()]
+      } else if (formato === 'mesa') {
+        iniciais = [linhaVazia(), linhaVazia()]
+      }
+    } else if (formato === 'individual_confronto' && iniciais.length === 1 && iniciais[0].estudante_id) {
+      iniciais = [...iniciais, linhaVazia()]
+    }
+
     setErroPartida(null)
     setGerenciando(p)
-    setLinhas((p.partida_participantes ?? []).map(linhaDe))
+    setLinhas(iniciais)
   }
 
-  const categoriaGerenciando = gerenciando
-    ? categorias.find((c) => c.id === gerenciando.modalidade_categoria_id)
-    : null
-  const ehMesa = MODALIDADES_MESA.includes(categoriaGerenciando?.modalidades?.slug ?? '')
-
-  function alternarModo(modo: 'turmas' | 'atletas') {
-    if (modo === modoParticipantes) return
-    setModoParticipantes(modo)
-    setLinhas([])
-    setErroPartida(null)
-    setPickerAberto(false)
-    setBuscaAtleta('')
-  }
-
-  function adicionarLinha() {
+  function adicionarLinhaTurma() {
     const usadas = new Set(linhas.map((l) => l.turma_id))
     const disponivel = turmas.find((t) => !usadas.has(t.id))
-    setLinhas((ls) => [
-      ...ls,
-      {
-        turma_id: disponivel?.id ?? '',
-        estudante_id: '',
-        placar: '',
-        tempo: '',
-        pontuacao: '',
-        posicao: '',
-        vencedor: '',
-        observacao: '',
-      },
-    ])
+    setLinhas((ls) => [...ls, linhaVazia(disponivel?.id ?? '', '')])
   }
 
-  function adicionarAtleta(id: string) {
-    const atleta = atletas.find((a) => a.id === id)
-    if (!atleta) return
-    if (linhas.some((l) => l.estudante_id === id)) {
-      setErroPartida('Este atleta já está na partida.')
-      return
-    }
-    if (ehMesa && linhas.length >= 4) {
-      setErroPartida('A mesa já tem 4 atletas. Crie outra partida para a próxima mesa.')
+  function adicionarLinhaAtleta() {
+    if (infoFormatoGerenciando.maxParticipantes && linhas.length >= infoFormatoGerenciando.maxParticipantes) {
+      setErroPartida(
+        formatoGerenciando === 'mesa'
+          ? 'A mesa já atingiu o limite de 4 atletas. Crie outra partida para a próxima mesa.'
+          : 'Confrontos individuais diretos aceitam no máximo 2 atletas (1 × 1).',
+      )
       return
     }
     setErroPartida(null)
-    setLinhas((ls) => [
-      ...ls,
-      {
-        turma_id: atleta.turma_id,
-        estudante_id: id,
-        placar: '',
-        tempo: '',
-        pontuacao: '',
-        posicao: '',
-        vencedor: '',
-        observacao: '',
-      },
-    ])
-    setPickerAberto(false)
-    setBuscaAtleta('')
+    setLinhas((ls) => [...ls, linhaVazia('', '')])
   }
 
-  const atletasFiltrados = useMemo(() => {
-    const termo = buscaAtleta.trim().toLowerCase()
-    const selecionados = new Set(linhas.map((l) => l.estudante_id).filter(Boolean))
-    const disponiveis = atletas.filter((a) => !selecionados.has(a.id))
-    if (!termo) return disponiveis.slice(0, 60)
-    return disponiveis
-      .filter(
-        (a) =>
-          a.nome_completo.toLowerCase().includes(termo) ||
-          (a.turmas?.numero !== undefined && String(a.turmas.numero).includes(termo)),
-      )
-      .slice(0, 60)
-  }, [atletas, buscaAtleta, linhas])
-
   function atualizarLinha(indice: number, campo: keyof Linha, valor: string) {
+    setErroPartida(null)
     setLinhas((ls) => ls.map((l, i) => (i === indice ? { ...l, [campo]: valor } : l)))
   }
 
+  function selecionarAtletaNaLinha(indice: number, atleta: AtletaOpcao | null) {
+    setErroPartida(null)
+    setLinhas((ls) =>
+      ls.map((l, i) =>
+        i === indice
+          ? {
+              ...l,
+              estudante_id: atleta?.id ?? '',
+              turma_id: atleta?.turma_id ?? '',
+            }
+          : l,
+      ),
+    )
+  }
+
   function removerLinha(indice: number) {
+    setErroPartida(null)
     setLinhas((ls) => ls.filter((_, i) => i !== indice))
   }
 
   async function salvarResultado() {
     if (!gerenciando) return
-    const porAtleta = modoParticipantes === 'atletas'
-    const ids = linhas.map((l) => (porAtleta ? l.estudante_id : l.turma_id)).filter(Boolean)
-    if (new Set(ids).size !== ids.length) {
+    const porAtleta = infoFormatoGerenciando.usaAtletas
+
+    if (porAtleta && schemaAtletasPendente) {
       setErroPartida(
-        porAtleta
-          ? 'Cada atleta pode aparecer apenas uma vez na partida.'
-          : 'Cada turma pode aparecer apenas uma vez na partida.',
+        'O banco Supabase ainda não tem o relacionamento partida_participantes -> estudantes. Aplique as migrations 0012_partidas_atletas.sql e 0013_partidas_formatos_validacoes.sql no SQL Editor.',
       )
       return
     }
-    if (ids.length === 0) {
-      setErroPartida(porAtleta ? 'Adicione ao menos um atleta.' : 'Adicione ao menos uma turma.')
+
+    const linhasValidas = linhas.filter((l) => (porAtleta ? Boolean(l.estudante_id) : Boolean(l.turma_id)))
+    const erroValidacao = validarParticipantesPartida(formatoGerenciando, linhasValidas)
+    if (erroValidacao) {
+      setErroPartida(erroValidacao)
       return
     }
-    if (porAtleta && ehMesa && linhas.length > 4) {
-      setErroPartida('Mesas de baralho, UNO e dominó aceitam até 4 atletas.')
-      return
-    }
+
     setSalvandoPartida(true)
     setErroPartida(null)
     try {
-      const existentes = new Set((gerenciando.partida_participantes ?? []).map((p) => p.id))
-      const manter = new Set(linhas.map((l) => l.id).filter(Boolean) as string[])
-      const remover = [...existentes].filter((id) => !manter.has(id))
+      const mapaExistentes = new Map((gerenciando.partida_participantes ?? []).map((p) => [p.id, p]))
+      const manterMesmaIdentidade = new Set<string>()
+      const linhasParaInserir: Linha[] = []
+      const linhasParaAtualizar: Linha[] = []
 
-      if (remover.length > 0) {
-        const { error } = await supabase.from('partida_participantes').delete().in('id', remover)
+      for (const l of linhasValidas) {
+        const antigo = l.id ? mapaExistentes.get(l.id) : undefined
+        const mesmaIdentidade =
+          antigo !== undefined &&
+          (porAtleta
+            ? antigo.estudante_id === l.estudante_id
+            : antigo.estudante_id === null && antigo.turma_id === l.turma_id)
+
+        if (mesmaIdentidade && l.id) {
+          manterMesmaIdentidade.add(l.id)
+          linhasParaAtualizar.push(l)
+        } else {
+          linhasParaInserir.push(l)
+        }
+      }
+
+      const removerIds = [...mapaExistentes.keys()].filter((id) => !manterMesmaIdentidade.has(id))
+      if (removerIds.length > 0) {
+        const { error } = await supabase.from('partida_participantes').delete().in('id', removerIds)
         if (error) throw error
       }
 
-      for (const l of linhas) {
-        const payload = {
+      const montarPayload = (l: Linha) => {
+        const atleta = porAtleta ? atletas.find((a) => a.id === l.estudante_id) : undefined
+        return {
           partida_id: gerenciando.id,
-          turma_id: l.turma_id,
-          estudante_id: porAtleta ? l.estudante_id || null : null,
+          turma_id: porAtleta ? (atleta?.turma_id ?? l.turma_id) : l.turma_id,
+          ...(schemaAtletasPendente ? {} : { estudante_id: porAtleta ? l.estudante_id : null }),
           placar: l.placar === '' ? null : Number(l.placar),
           tempo: l.tempo === '' ? null : Number(l.tempo),
           pontuacao: l.pontuacao === '' ? null : Number(l.pontuacao),
@@ -413,16 +623,24 @@ export default function Partidas() {
           vencedor: l.vencedor === '' ? null : l.vencedor === 'sim',
           observacao: l.observacao.trim() || null,
         }
-        if (l.id) {
-          const { error } = await supabase.from('partida_participantes').update(payload).eq('id', l.id)
-          if (error) throw error
-        } else {
-          const { error } = await supabase.from('partida_participantes').insert(payload)
-          if (error) throw error
-        }
       }
 
-      notificar('Partida atualizada.')
+      for (const l of linhasParaAtualizar) {
+        const { error } = await supabase
+          .from('partida_participantes')
+          .update(montarPayload(l))
+          .eq('id', l.id as string)
+        if (error) throw error
+      }
+
+      if (linhasParaInserir.length > 0) {
+        const { error } = await supabase
+          .from('partida_participantes')
+          .insert(linhasParaInserir.map(montarPayload))
+        if (error) throw error
+      }
+
+      notificar('Participantes e resultado atualizados.')
       setGerenciando(null)
       lista.reload()
     } catch (e) {
@@ -467,7 +685,7 @@ export default function Partidas() {
     <>
       <PageHeader
         titulo="Partidas"
-        descricao="Programe jogos, registre placares e acompanhe conflitos de horário."
+        descricao="Programe jogos coletivos, confrontos individuais (1×1) e mesas de até 4 atletas."
         acoes={
           <>
             <Button variant="outline" onClick={verConflitos} loading={carregandoConflitos}>
@@ -479,6 +697,17 @@ export default function Partidas() {
           </>
         }
       />
+
+      {schemaAtletasPendente ? (
+        <div className="mb-4">
+          <Aviso tom="atencao" titulo="Atualização pendente no banco Supabase">
+            A coluna <code>partida_participantes.estudante_id</code> ainda não existe no banco de produção (erro{' '}
+            <code>PGRST200</code>). Para habilitar confrontos individuais e mesas de atletas, execute as migrations{' '}
+            <strong>0012_partidas_atletas.sql</strong> e <strong>0013_partidas_formatos_validacoes.sql</strong> no SQL
+            Editor do Supabase.
+          </Aviso>
+        </div>
+      ) : null}
 
       <Card className="mb-4 p-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -539,6 +768,9 @@ export default function Partidas() {
               <tbody>
                 {itens.map((p) => {
                   const participantes = p.partida_participantes ?? []
+                  const cat = categorias.find((c) => c.id === p.modalidade_categoria_id) ?? p.modalidade_categorias
+                  const formato = formatoPartidaDe(cat)
+                  const ehMesa = formato === 'mesa'
                   return (
                     <tr key={p.id}>
                       <Td>
@@ -548,27 +780,77 @@ export default function Partidas() {
                         <p className="text-[11px] text-slate-500">{p.locais?.nome ?? 'Local não definido'}</p>
                       </Td>
                       <Td>
-                        <p className="text-sm">{p.modalidade_categorias?.modalidades?.nome ?? '—'}</p>
-                        <p className="text-[11px] text-slate-500">{p.modalidade_categorias?.nome}</p>
+                        <p className="text-sm font-medium text-slate-800">
+                          {p.modalidade_categorias?.modalidades?.nome ?? '—'}
+                        </p>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                          <span className="text-[11px] text-slate-500">{p.modalidade_categorias?.nome}</span>
+                          {ehMesa ? <Badge tom="roxo">Mesa</Badge> : null}
+                          {formato === 'individual_confronto' ? <Badge tom="azul">1×1</Badge> : null}
+                        </div>
                       </Td>
                       <Td>
                         {participantes.length === 0 ? (
                           <span className="text-xs text-amber-700">Sem participantes</span>
+                        ) : ehMesa && participantes.some((pp) => pp.estudante_id) ? (
+                          <div className="space-y-1">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                              <LayoutGrid className="h-3 w-3 text-violet-600" />
+                              Mesa ({participantes.length}/4)
+                            </span>
+                            <div className="flex flex-wrap gap-1 text-xs">
+                              {participantes.map((pp) => (
+                                <span
+                                  key={pp.id}
+                                  className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 ${
+                                    pp.vencedor
+                                      ? 'bg-emerald-50 font-semibold text-emerald-900 ring-1 ring-emerald-200'
+                                      : 'bg-slate-100 text-slate-700'
+                                  }`}
+                                >
+                                  {pp.vencedor ? <Trophy className="h-3 w-3 text-emerald-600" /> : null}
+                                  <span>{pp.estudantes?.nome_completo ?? 'Atleta'}</span>
+                                  {pp.turmas ? (
+                                    <span className="text-[10px] text-slate-500">T{pp.turmas.numero}</span>
+                                  ) : null}
+                                  {pp.posicao !== null ? (
+                                    <span className="rounded bg-white px-1 text-[10px] font-semibold tabular-nums">
+                                      {pp.posicao}º
+                                    </span>
+                                  ) : pp.placar !== null ? (
+                                    <span className="rounded bg-white px-1 text-[10px] font-semibold tabular-nums">
+                                      {pp.placar}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
                         ) : (
                           <div className="flex flex-wrap items-center gap-1 text-xs">
                             {participantes.map((pp, idx) => (
-                              <span key={pp.id}>
+                              <span key={pp.id} className="inline-flex items-center gap-1">
                                 {idx > 0 ? <span className="mx-0.5 text-slate-400">×</span> : null}
-                                <span className="font-medium">
+                                <span
+                                  className={`font-medium ${pp.vencedor ? 'text-emerald-800' : 'text-slate-800'}`}
+                                >
                                   {pp.estudante_id
                                     ? pp.estudantes?.nome_completo ?? 'Atleta'
                                     : turmaRotulo(pp.turmas)}
                                 </span>
                                 {pp.estudante_id && pp.turmas ? (
-                                  <span className="ml-1 text-[10px] text-slate-400">T{pp.turmas.numero}</span>
+                                  <span className="rounded bg-slate-100 px-1 text-[10px] font-medium text-slate-500">
+                                    T{pp.turmas.numero}
+                                  </span>
                                 ) : null}
                                 {pp.placar !== null ? (
-                                  <span className="ml-1 rounded bg-slate-100 px-1 tabular-nums">{pp.placar}</span>
+                                  <span className="rounded bg-slate-100 px-1 font-semibold tabular-nums">
+                                    {pp.placar}
+                                  </span>
+                                ) : pp.posicao !== null ? (
+                                  <span className="rounded bg-slate-100 px-1 font-semibold tabular-nums">
+                                    {pp.posicao}º
+                                  </span>
                                 ) : null}
                               </span>
                             ))}
@@ -611,10 +893,17 @@ export default function Partidas() {
         </Card>
       )}
 
+      {/* Modal: Nova partida / Editar partida */}
       <Dialog
         open={editando !== null}
         onClose={() => setEditando(null)}
         titulo={editando === 'nova' ? 'Nova partida' : 'Editar partida'}
+        descricao={
+          editando === 'nova'
+            ? 'Escolha a modalidade para exibir automaticamente o formato de seleção de participantes.'
+            : 'Altere data, local, fase ou situação da partida.'
+        }
+        largura="lg"
         rodape={
           <>
             <Button variant="outline" onClick={() => setEditando(null)} disabled={salvando}>
@@ -626,86 +915,267 @@ export default function Partidas() {
           </>
         }
       >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Modalidade / categoria" obrigatorio className="sm:col-span-2">
-            <Select
-              value={form.modalidade_categoria_id}
-              onChange={(e) => setForm({ ...form, modalidade_categoria_id: e.target.value })}
-            >
-              <option value="">Selecione…</option>
-              {gruposCategorias.map((g) => (
-                <optgroup key={g.nome} label={g.nome}>
-                  {g.itens.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nome}
-                      {c.min_participantes_partida === null ? ' (mínimo não definido)' : ''}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Data e hora" hint="Fuso de Belém (UTC−3).">
-            <Input
-              type="datetime-local"
-              value={form.data_hora}
-              onChange={(e) => setForm({ ...form, data_hora: e.target.value })}
-            />
-          </Field>
-          <Field label="Local">
-            <Select value={form.local_id} onChange={(e) => setForm({ ...form, local_id: e.target.value })}>
-              <option value="">Não definido</option>
-              {locais.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.nome}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Fase">
-            <Select value={form.fase} onChange={(e) => setForm({ ...form, fase: e.target.value })}>
-              {FASES.map((f) => (
-                <option key={f} value={f}>
-                  {ROTULO_FASE[f]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Rodada" hint="Opcional.">
-            <Input
-              type="number"
-              min={1}
-              value={form.rodada}
-              onChange={(e) => setForm({ ...form, rodada: e.target.value })}
-            />
-          </Field>
-          <Field label="Situação">
-            <Select
-              value={form.status}
-              onChange={(e) => setForm({ ...form, status: e.target.value as StatusPartida })}
-            >
-              {STATUS_PARTIDA.map((s) => (
-                <option key={s.valor} value={s.valor}>
-                  {s.rotulo}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Observações" className="sm:col-span-2">
-            <Textarea
-              value={form.observacoes}
-              onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
-            />
-          </Field>
-        </div>
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Modalidade / categoria" obrigatorio className="sm:col-span-2">
+              <Select
+                value={form.modalidade_categoria_id}
+                onChange={(e) => aoTrocarCategoriaForm(e.target.value)}
+              >
+                <option value="">Selecione…</option>
+                {gruposCategorias.map((g) => (
+                  <optgroup key={g.nome} label={g.nome}>
+                    {g.itens.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nome}
+                        {c.min_participantes_partida === null ? ' (mínimo não definido)' : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </Select>
+            </Field>
 
-        {erroForm ? (
-          <div className="mt-3">
-            <Aviso tom="erro">{erroForm}</Aviso>
+            <Field label="Data e hora" hint="Fuso de Belém (UTC−3).">
+              <Input
+                type="datetime-local"
+                value={form.data_hora}
+                onChange={(e) => setForm({ ...form, data_hora: e.target.value })}
+              />
+            </Field>
+            <Field label="Local">
+              <Select value={form.local_id} onChange={(e) => setForm({ ...form, local_id: e.target.value })}>
+                <option value="">Não definido</option>
+                {locais.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.nome}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Fase">
+              <Select value={form.fase} onChange={(e) => setForm({ ...form, fase: e.target.value })}>
+                {FASES.map((f) => (
+                  <option key={f} value={f}>
+                    {ROTULO_FASE[f]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Rodada" hint="Opcional.">
+              <Input
+                type="number"
+                min={1}
+                value={form.rodada}
+                onChange={(e) => setForm({ ...form, rodada: e.target.value })}
+              />
+            </Field>
+            <Field label="Situação">
+              <Select
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value as StatusPartida })}
+              >
+                {STATUS_PARTIDA.map((s) => (
+                  <option key={s.valor} value={s.valor}>
+                    {s.rotulo}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Observações" className="sm:col-span-2">
+              <Textarea
+                value={form.observacoes}
+                onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
+              />
+            </Field>
           </div>
-        ) : null}
+
+          {editando === 'nova' && categoriaForm ? (
+            <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      {formatoForm === 'mesa'
+                        ? 'Composição da mesa'
+                        : formatoForm === 'individual_confronto'
+                          ? 'Confronto de atletas'
+                          : formatoForm === 'individual_bateria'
+                            ? 'Atletas da bateria'
+                            : 'Equipes / turmas participantes'}
+                    </h3>
+                    <BadgeFormato formato={formatoForm} />
+                  </div>
+                  <p className="mt-0.5 text-xs text-slate-500">{infoFormatoForm.descricao}</p>
+                </div>
+                {formatoForm === 'mesa' ? (
+                  <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">
+                    {slotsCriacao.filter((s) => Boolean(s.estudante_id)).length} / 4 atletas
+                  </span>
+                ) : null}
+              </div>
+
+              {formatoForm === 'coletiva' ? (
+                <div className="space-y-2">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {slotsCriacao.map((slot, idx) => {
+                      const outrasTurmas = new Set(
+                        slotsCriacao.filter((_, i) => i !== idx).map((s) => s.turma_id).filter(Boolean),
+                      )
+                      return (
+                        <div key={`turma-${idx}`} className="flex items-end gap-1.5">
+                          <Field label={`Turma / equipe ${idx + 1}`} className="flex-1">
+                            <Select
+                              value={slot.turma_id}
+                              onChange={(e) =>
+                                atualizarSlotCriacao(idx, { turma_id: e.target.value, estudante_id: '' })
+                              }
+                            >
+                              <option value="">A definir…</option>
+                              {turmas.map((t) => (
+                                <option key={t.id} value={t.id} disabled={outrasTurmas.has(t.id)}>
+                                  {t.numero}
+                                  {t.nome_equipe ? ` · ${t.nome_equipe}` : ''}
+                                </option>
+                              ))}
+                            </Select>
+                          </Field>
+                          {slotsCriacao.length > 2 ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              aria-label="Remover turma"
+                              onClick={() => removerSlotCriacao(idx)}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-600" />
+                            </Button>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={adicionarSlotCriacao}
+                    disabled={slotsCriacao.length >= turmas.length}
+                  >
+                    <Plus className="h-4 w-4" /> Adicionar outra turma
+                  </Button>
+                </div>
+              ) : formatoForm === 'individual_confronto' ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[0, 1].map((idx) => {
+                    const slot = slotsCriacao[idx] ?? { turma_id: '', estudante_id: '' }
+                    const outrosIds = new Set(
+                      slotsCriacao.filter((_, i) => i !== idx).map((s) => s.estudante_id).filter(Boolean),
+                    )
+                    return (
+                      <div key={`confronto-${idx}`} className="rounded-lg border border-slate-200 bg-white p-3">
+                        <SeletorAtleta
+                          rotulo={idx === 0 ? 'Primeiro atleta' : 'Segundo atleta'}
+                          valor={slot.estudante_id}
+                          atletas={atletas}
+                          inscritosNaCategoria={inscritosCategoriaForm}
+                          excluirIds={outrosIds}
+                          placeholder={idx === 0 ? 'Buscar primeiro atleta…' : 'Buscar segundo atleta…'}
+                          aoSelecionar={(atleta) =>
+                            atualizarSlotCriacao(idx, {
+                              estudante_id: atleta?.id ?? '',
+                              turma_id: atleta?.turma_id ?? '',
+                            })
+                          }
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : formatoForm === 'mesa' ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[0, 1, 2, 3].map((idx) => {
+                    const slot = slotsCriacao[idx] ?? { turma_id: '', estudante_id: '' }
+                    const outrosIds = new Set(
+                      slotsCriacao.filter((_, i) => i !== idx).map((s) => s.estudante_id).filter(Boolean),
+                    )
+                    return (
+                      <div key={`mesa-${idx}`} className="rounded-lg border border-slate-200 bg-white p-3">
+                        <SeletorAtleta
+                          rotulo={`Jogador ${idx + 1}`}
+                          valor={slot.estudante_id}
+                          atletas={atletas}
+                          inscritosNaCategoria={inscritosCategoriaForm}
+                          excluirIds={outrosIds}
+                          placeholder={`Selecionar jogador ${idx + 1}…`}
+                          aoSelecionar={(atleta) =>
+                            atualizarSlotCriacao(idx, {
+                              estudante_id: atleta?.id ?? '',
+                              turma_id: atleta?.turma_id ?? '',
+                            })
+                          }
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {slotsCriacao.map((slot, idx) => {
+                      const outrosIds = new Set(
+                        slotsCriacao.filter((_, i) => i !== idx).map((s) => s.estudante_id).filter(Boolean),
+                      )
+                      return (
+                        <div
+                          key={`bateria-${idx}`}
+                          className="relative rounded-lg border border-slate-200 bg-white p-3"
+                        >
+                          <SeletorAtleta
+                            rotulo={`Atleta ${idx + 1}`}
+                            valor={slot.estudante_id}
+                            atletas={atletas}
+                            inscritosNaCategoria={inscritosCategoriaForm}
+                            excluirIds={outrosIds}
+                            placeholder="Selecionar atleta…"
+                            aoSelecionar={(atleta) =>
+                              atualizarSlotCriacao(idx, {
+                                estudante_id: atleta?.id ?? '',
+                                turma_id: atleta?.turma_id ?? '',
+                              })
+                            }
+                          />
+                          {slotsCriacao.length > 2 ? (
+                            <button
+                              type="button"
+                              onClick={() => removerSlotCriacao(idx)}
+                              className="mt-2 text-[11px] font-medium text-red-600 hover:underline"
+                            >
+                              Remover vaga
+                            </button>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={adicionarSlotCriacao}>
+                    <Plus className="h-4 w-4" /> Adicionar atleta à bateria
+                  </Button>
+                </div>
+              )}
+
+              <p className="text-[11px] text-slate-500">
+                Você pode definir os participantes agora ou deixar em branco para preencher depois em{' '}
+                <strong>Resultado</strong>.
+              </p>
+            </div>
+          ) : null}
+
+          {erroForm ? <Aviso tom="erro">{erroForm}</Aviso> : null}
+        </div>
       </Dialog>
 
+      {/* Modal: Participantes e resultado */}
       <Dialog
         open={gerenciando !== null}
         onClose={() => setGerenciando(null)}
@@ -714,7 +1184,11 @@ export default function Partidas() {
           gerenciando
             ? `${gerenciando.modalidade_categorias?.modalidades?.nome ?? ''} · ${
                 gerenciando.modalidade_categorias?.nome ?? ''
-              }${gerenciando.modalidade_categorias?.min_participantes_partida ? ` · mínimo ${gerenciando.modalidade_categorias.min_participantes_partida}` : ''}`
+              }${
+                gerenciando.modalidade_categorias?.min_participantes_partida
+                  ? ` · mínimo ${gerenciando.modalidade_categorias.min_participantes_partida}`
+                  : ''
+              }`
             : ''
         }
         largura="lg"
@@ -735,113 +1209,96 @@ export default function Partidas() {
           <div className="space-y-3">
             {erroPartida ? <Aviso tom="erro">{erroPartida}</Aviso> : null}
 
-            <div className="flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Participantes
-              </span>
-              <button
-                type="button"
-                onClick={() => alternarModo('turmas')}
-                className={`min-h-9 rounded-lg px-3 text-xs font-semibold ${
-                  modoParticipantes === 'turmas'
-                    ? 'bg-noite-900 text-white'
-                    : 'bg-white text-slate-600 ring-1 ring-slate-200'
-                }`}
-              >
-                Turmas
-              </button>
-              <button
-                type="button"
-                onClick={() => alternarModo('atletas')}
-                className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold ${
-                  modoParticipantes === 'atletas'
-                    ? 'bg-noite-900 text-white'
-                    : 'bg-white text-slate-600 ring-1 ring-slate-200'
-                }`}
-              >
-                <UserRound className="h-3.5 w-3.5" /> Atletas
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2.5">
+              <div className="space-y-0.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <BadgeFormato formato={formatoGerenciando} />
+                  {formatoGerenciando === 'mesa' ? (
+                    <span className="text-xs font-semibold text-slate-700">
+                      {linhas.filter((l) => Boolean(l.estudante_id)).length} / 4 atletas na mesa
+                    </span>
+                  ) : null}
+                </div>
+                <p className="text-xs text-slate-500">{infoFormatoGerenciando.descricao}</p>
+              </div>
+
+              {infoFormatoGerenciando.usaAtletas &&
+              formatoGerenciando !== 'individual_confronto' &&
+              (!infoFormatoGerenciando.maxParticipantes ||
+                linhas.length < infoFormatoGerenciando.maxParticipantes) ? (
+                <Button variant="outline" size="sm" onClick={adicionarLinhaAtleta}>
+                  <Plus className="h-4 w-4" />
+                  {formatoGerenciando === 'mesa' ? 'Adicionar jogador' : 'Adicionar atleta'}
+                </Button>
+              ) : null}
             </div>
 
-            {modoParticipantes === 'atletas' && ehMesa ? (
-              <Aviso tom="info">
-                Mesas de baralho, UNO e dominó: até <strong>4 atletas por partida</strong>. Para a
-                próxima mesa, crie outra partida e selecione os atletas daquela mesa.
+            {infoFormatoGerenciando.usaAtletas &&
+            linhas.some((l) => !l.estudante_id && Boolean(l.turma_id)) ? (
+              <Aviso tom="atencao">
+                Esta partida possui participantes cadastrados como turma. Selecione os atletas correspondentes abaixo
+                para atualizar para o formato individual.
               </Aviso>
             ) : null}
 
             {linhas.length === 0 ? (
               <Aviso tom="info">
-                {modoParticipantes === 'atletas'
-                  ? 'Busque e adicione os atletas que vão competir. O portal passa a mostrar contra quem cada um joga.'
-                  : 'Adicione as turmas participantes. Para partidas oficiais, a categoria precisa ter um mínimo de participantes configurado.'}
+                {formatoGerenciando === 'mesa'
+                  ? 'Adicione de 2 a 4 atletas para montar esta mesa.'
+                  : infoFormatoGerenciando.usaAtletas
+                    ? 'Adicione os atletas que vão competir nesta partida.'
+                    : 'Adicione as turmas participantes desta partida.'}
               </Aviso>
-            ) : null}
-
-            {modoParticipantes === 'atletas' ? (
-              <div className="rounded-xl border border-slate-200 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-slate-800">
-                    Atletas na partida ({linhas.length}{ehMesa ? ' / 4' : ''})
-                  </p>
-                  <Button variant="outline" size="sm" onClick={() => setPickerAberto((v) => !v)}>
-                    <Search className="h-4 w-4" /> {pickerAberto ? 'Fechar busca' : 'Buscar atleta'}
-                  </Button>
-                </div>
-                {pickerAberto ? (
-                  <div className="mt-3 border-t border-slate-100 pt-3">
-                    <Input
-                      value={buscaAtleta}
-                      onChange={(e) => setBuscaAtleta(e.target.value)}
-                      placeholder="Buscar por nome ou número da turma"
-                      autoFocus
-                    />
-                    <div className="scrollbar-thin mt-2 max-h-56 space-y-0.5 overflow-y-auto rounded-lg border border-slate-200">
-                      {atletasFiltrados.length === 0 ? (
-                        <p className="p-3 text-xs text-slate-500">Nenhum atleta disponível.</p>
-                      ) : (
-                        atletasFiltrados.map((a) => (
-                          <button
-                            key={a.id}
-                            type="button"
-                            onClick={() => adicionarAtleta(a.id)}
-                            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
-                          >
-                            <span className="truncate text-slate-800">{a.nome_completo}</span>
-                            <span className="shrink-0 text-[11px] font-medium text-slate-500">
-                              Turma {a.turmas?.numero ?? '—'}
-                            </span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
             ) : null}
 
             <div className="space-y-3">
               {linhas.map((l, idx) => {
-                const atleta = modoParticipantes === 'atletas'
-                  ? atletas.find((a) => a.id === l.estudante_id)
-                  : undefined
-                const numeroTurma = atleta?.turmas?.numero ?? turmas.find((t) => t.id === l.turma_id)?.numero
+                const outrosIdsAtleta = new Set(
+                  linhas.filter((_, i) => i !== idx).map((x) => x.estudante_id).filter(Boolean),
+                )
+                const outrasTurmas = new Set(
+                  linhas.filter((_, i) => i !== idx).map((x) => x.turma_id).filter(Boolean),
+                )
+                const rotuloAtleta =
+                  formatoGerenciando === 'individual_confronto'
+                    ? idx === 0
+                      ? 'Primeiro atleta'
+                      : 'Segundo atleta'
+                    : formatoGerenciando === 'mesa'
+                      ? `Jogador ${idx + 1}`
+                      : `Atleta ${idx + 1}`
+
                 return (
                   <div key={l.id ?? `nova-${idx}`} className="rounded-xl border border-slate-200 p-3">
+                    {infoFormatoGerenciando.usaAtletas ? (
+                      <div className="mb-3 flex items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                          <SeletorAtleta
+                            rotulo={rotuloAtleta}
+                            obrigatorio
+                            valor={l.estudante_id}
+                            atletas={atletas}
+                            inscritosNaCategoria={inscritosCategoriaGerenciando}
+                            excluirIds={outrosIdsAtleta}
+                            aoSelecionar={(atleta) => selecionarAtletaNaLinha(idx, atleta)}
+                          />
+                        </div>
+                        {formatoGerenciando !== 'individual_confronto' || linhas.length > 2 ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="mt-5"
+                            aria-label="Remover atleta"
+                            onClick={() => removerLinha(idx)}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : null}
+
                     <div className="flex flex-wrap items-end gap-2">
-                      {modoParticipantes === 'atletas' ? (
-                        <Field label="Atleta" className="min-w-[220px] flex-1">
-                          <div className="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm">
-                            <UserRound className="h-4 w-4 shrink-0 text-slate-400" />
-                            <span className="truncate font-medium text-slate-800">
-                              {atleta?.nome_completo ?? 'Atleta'}
-                            </span>
-                            <span className="ml-auto shrink-0 rounded bg-white px-1.5 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200">
-                              T{numeroTurma ?? '—'}
-                            </span>
-                          </div>
-                        </Field>
-                      ) : (
+                      {!infoFormatoGerenciando.usaAtletas ? (
                         <Field label="Turma" className="min-w-[180px] flex-1">
                           <Select
                             value={l.turma_id}
@@ -849,14 +1306,14 @@ export default function Partidas() {
                           >
                             <option value="">Selecione…</option>
                             {turmas.map((t) => (
-                              <option key={t.id} value={t.id}>
+                              <option key={t.id} value={t.id} disabled={outrasTurmas.has(t.id)}>
                                 {t.numero}
                                 {t.nome_equipe ? ` · ${t.nome_equipe}` : ''}
                               </option>
                             ))}
                           </Select>
                         </Field>
-                      )}
+                      ) : null}
                       <Field label="Placar" className="w-20">
                         <Input
                           type="number"
@@ -897,14 +1354,16 @@ export default function Partidas() {
                           <option value="nao">Não</option>
                         </Select>
                       </Field>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        aria-label={modoParticipantes === 'atletas' ? 'Remover atleta' : 'Remover turma'}
-                        onClick={() => removerLinha(idx)}
-                      >
-                        <Trash2 className="h-4 w-4 text-red-600" />
-                      </Button>
+                      {!infoFormatoGerenciando.usaAtletas ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label="Remover turma"
+                          onClick={() => removerLinha(idx)}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </Button>
+                      ) : null}
                     </div>
                     <Field label="Observação" className="mt-2">
                       <Input
@@ -918,9 +1377,17 @@ export default function Partidas() {
               })}
             </div>
 
-            {modoParticipantes === 'turmas' ? (
-              <Button variant="outline" onClick={adicionarLinha} disabled={linhas.length >= turmas.length}>
+            {!infoFormatoGerenciando.usaAtletas ? (
+              <Button variant="outline" onClick={adicionarLinhaTurma} disabled={linhas.length >= turmas.length}>
                 <Plus className="h-4 w-4" /> Adicionar turma
+              </Button>
+            ) : formatoGerenciando === 'mesa' && linhas.length < 4 ? (
+              <Button variant="outline" onClick={adicionarLinhaAtleta}>
+                <Plus className="h-4 w-4" /> Adicionar jogador à mesa ({linhas.length}/4)
+              </Button>
+            ) : formatoGerenciando === 'individual_bateria' ? (
+              <Button variant="outline" onClick={adicionarLinhaAtleta}>
+                <Plus className="h-4 w-4" /> Adicionar atleta à bateria
               </Button>
             ) : null}
           </div>
@@ -931,7 +1398,7 @@ export default function Partidas() {
         open={conflitos !== null}
         onClose={() => setConflitos(null)}
         titulo="Conflitos de horário"
-        descricao="Turmas com duas partidas no mesmo horário ou dois jogos no mesmo local."
+        descricao="Turmas ou atletas com duas partidas no mesmo horário, ou dois jogos no mesmo local."
         largura="lg"
       >
         {(conflitos ?? []).length === 0 ? (
@@ -950,7 +1417,9 @@ export default function Partidas() {
               {(conflitos ?? []).map((c, i) => (
                 <tr key={`${c.tipo}-${i}`}>
                   <Td>
-                    <Badge tom={c.tipo === 'local' ? 'ambar' : 'vermelho'}>{c.tipo}</Badge>
+                    <Badge tom={c.tipo === 'local' ? 'ambar' : c.tipo === 'atleta' ? 'roxo' : 'vermelho'}>
+                      {c.tipo}
+                    </Badge>
                   </Td>
                   <Td className="text-xs tabular-nums">{formatarDataHora(c.data_hora)}</Td>
                   <Td className="text-xs font-medium">{c.referencia}</Td>
