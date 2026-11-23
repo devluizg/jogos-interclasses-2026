@@ -43,9 +43,20 @@ import {
   VerTudo,
 } from './ui'
 
+import type { BlocoProgramacao } from '@/lib/chaveamentosTypes'
+import {
+  carregarChaveamentosPublicos,
+  extrairBlocosProgramacao,
+  extrairResumosChaveamentos,
+  statusParaBadge,
+  type ResumoAbaPublica,
+} from './chaveamentosPublico'
+
 type Resumo = {
   proximos: Programacao[]
+  proximosBlocos: BlocoProgramacao[]
   resultados: ResultadoPublico[]
+  podiosChaveamentos: ResumoAbaPublica[]
   classificacao: ClassificacaoPublica[]
   noticias: Noticia[]
   taca: TacaPublica[]
@@ -64,7 +75,7 @@ export default function Home() {
   const encerrado = fimMs !== null && Number.isFinite(fimMs) && Date.now() > fimMs
 
   const dados = useAsync<Resumo>(async () => {
-    const [prox, res, classif, noticias, taca] = await Promise.all([
+    const [prox, res, classif, noticias, taca, chaveamentos] = await Promise.all([
       supabase
         .from('vw_programacao')
         .select('*')
@@ -84,6 +95,7 @@ export default function Home() {
         .order('publicado_em', { ascending: false, nullsFirst: false })
         .limit(3),
       supabase.from('vw_taca_publica').select('*').order('posicao').limit(3),
+      carregarChaveamentosPublicos(),
     ])
 
     for (const r of [prox, res, classif, noticias, taca]) {
@@ -100,9 +112,25 @@ export default function Home() {
       })
       .slice(0, 4)
 
+    const blocos = extrairBlocosProgramacao(chaveamentos)
+      .filter((b) => !b.status.toLowerCase().includes('conclu') && b.tipo.toLowerCase() !== 'recreação')
+      .sort((a, b) => {
+        const andA = a.status.toLowerCase().includes('andamento')
+        const andB = b.status.toLowerCase().includes('andamento')
+        if (andA !== andB) return andA ? -1 : 1
+        return 0
+      })
+      .slice(0, 4)
+
+    const podiosChaveamentos = extrairResumosChaveamentos(chaveamentos)
+      .filter((r) => r.temPodio)
+      .slice(0, 3)
+
     return {
       proximos,
+      proximosBlocos: blocos,
       resultados: (res.data ?? []) as ResultadoPublico[],
+      podiosChaveamentos,
       classificacao: (classif.data ?? []) as ClassificacaoPublica[],
       noticias: (noticias.data ?? []) as Noticia[],
       taca: (taca.data ?? []) as TacaPublica[],
@@ -118,12 +146,15 @@ export default function Home() {
       'noticias',
       'taca_notas',
       'taca_criterios',
+      'chaveamentos',
     ],
     dados.reload,
   )
   useSeo({ descricao: `${nomeEvento}. ${tema}` })
 
   const grupos = agruparResultados(dados.data?.resultados ?? []).slice(0, 3)
+  const podiosChaveamentos = dados.data?.podiosChaveamentos ?? []
+  const proximosBlocos = dados.data?.proximosBlocos ?? []
   const classificacao = dados.data?.classificacao ?? []
   const temClassificacao = classificacao.some(
     (c) => c.pontos > 0 || c.ouros > 0 || c.pratas > 0 || c.bronzes > 0,
@@ -249,13 +280,7 @@ export default function Home() {
               <div key={i} className="h-28 animate-pulse rounded-2xl bg-white" />
             ))}
           </div>
-        ) : (dados.data?.proximos ?? []).length === 0 ? (
-          <Vazio
-            titulo="Programação em preparação"
-            texto="Assim que a tabela de jogos for divulgada, ela aparece aqui automaticamente."
-            icone={<CalendarDays className="h-7 w-7" />}
-          />
-        ) : (
+        ) : (dados.data?.proximos ?? []).length > 0 ? (
           <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-2 md:gap-4 md:overflow-visible md:px-0 md:pb-0">
             {(dados.data?.proximos ?? []).map((jogo) => (
               <Card key={jogo.id} className="w-[82vw] max-w-sm shrink-0 snap-start p-4 md:w-auto md:max-w-none">
@@ -283,6 +308,38 @@ export default function Home() {
               </Card>
             ))}
           </div>
+        ) : proximosBlocos.length > 0 ? (
+          <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-2 md:gap-4 md:overflow-visible md:px-0 md:pb-0">
+            {proximosBlocos.map((bloco) => (
+              <Card key={bloco.id} className="w-[82vw] max-w-sm shrink-0 snap-start p-4 md:w-auto md:max-w-none">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-700">
+                      {bloco.modalidade}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {bloco.dia} · <Clock className="mb-0.5 inline h-3.5 w-3.5" /> {bloco.horario}
+                    </p>
+                  </div>
+                  <StatusBadge status={statusParaBadge(bloco.status)} />
+                </div>
+
+                <p className="mt-3 line-clamp-2 text-sm font-medium leading-snug text-noite-900">
+                  {bloco.confronto}
+                </p>
+
+                <p className="mt-3 text-xs text-slate-500">
+                  <MapPin className="mb-0.5 inline h-3.5 w-3.5" /> {bloco.local} · {bloco.categoriaFase}
+                </p>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Vazio
+            titulo="Programação em preparação"
+            texto="Assim que a tabela de jogos for divulgada, ela aparece aqui automaticamente."
+            icone={<CalendarDays className="h-7 w-7" />}
+          />
         )}
       </Section>
 
@@ -297,13 +354,7 @@ export default function Home() {
               <div key={i} className="h-36 animate-pulse rounded-2xl bg-white" />
             ))}
           </div>
-        ) : grupos.length === 0 ? (
-          <Vazio
-            titulo="Aguardando os primeiros resultados"
-            texto="Nenhum resultado oficial foi publicado até agora."
-            icone={<Medal className="h-7 w-7" />}
-          />
-        ) : (
+        ) : grupos.length > 0 ? (
           <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-3 md:gap-4 md:overflow-visible md:px-0 md:pb-0">
             {grupos.map((grupo) => (
               <Card key={grupo.chave} className="w-[80vw] max-w-sm shrink-0 snap-start p-4 md:w-auto md:max-w-none">
@@ -329,6 +380,39 @@ export default function Home() {
               </Card>
             ))}
           </div>
+        ) : podiosChaveamentos.length > 0 ? (
+          <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-3 md:gap-4 md:overflow-visible md:px-0 md:pb-0">
+            {podiosChaveamentos.map((resumo) => (
+              <Card key={`${resumo.slug}-${resumo.abaId}`} className="w-[80vw] max-w-sm shrink-0 snap-start p-4 md:w-auto md:max-w-none">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-700">
+                    {resumo.tituloAba}
+                  </p>
+                  <Medal className="h-4 w-4 text-noite-300" />
+                </div>
+                <ul className="mt-3 space-y-2.5">
+                  {[
+                    { pos: 1, nome: resumo.podio.primeiro },
+                    { pos: 2, nome: resumo.podio.segundo },
+                    { pos: 3, nome: resumo.podio.terceiro },
+                  ].map((it) => (
+                    <li key={it.pos} className="flex items-center gap-2.5">
+                      <Medalha posicao={it.pos} className="h-7 w-7 text-base" />
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-noite-900">
+                        {it.nome}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Vazio
+            titulo="Aguardando os primeiros resultados"
+            texto="Nenhum resultado oficial foi publicado até agora."
+            icone={<Medal className="h-7 w-7" />}
+          />
         )}
       </Section>
 
