@@ -13,6 +13,7 @@ import {
   Menu,
   Settings,
   ShieldAlert,
+  Table2,
   Trophy,
   Users,
   X,
@@ -38,6 +39,7 @@ const GRUPOS = [
     itens: [
       { para: '/admin/inscricoes', rotulo: 'Inscrições', icone: ClipboardList },
       { para: '/admin/partidas', rotulo: 'Partidas', icone: CalendarDays },
+      { para: '/admin/chaveamentos', rotulo: 'Chaveamentos', icone: Table2 },
       { para: '/admin/resultados', rotulo: 'Resultados', icone: Medal },
       { para: '/admin/conduta', rotulo: 'Conduta', icone: ShieldAlert },
       { para: '/admin/taca', rotulo: 'Taça Protagonista', icone: Award },

@@ -21,6 +21,7 @@ const TacaAdmin = lazy(() => import('@/pages/Taca'))
 const Configuracoes = lazy(() => import('@/pages/Configuracoes'))
 const Conteudo = lazy(() => import('@/pages/Conteudo'))
 const Historico = lazy(() => import('@/pages/Historico'))
+const Chaveamentos = lazy(() => import('@/pages/Chaveamentos'))
 
 const PublicLayout = lazy(() => import('@/public/PublicLayout'))
 const Home = lazy(() => import('@/public/Home'))
@@ -106,6 +107,7 @@ export default function App() {
               <Route path="modalidades/:id" element={<ModalidadeDetalhe />} />
               <Route path="inscricoes" element={<Inscricoes />} />
               <Route path="partidas" element={<Partidas />} />
+              <Route path="chaveamentos" element={<Chaveamentos />} />
               <Route path="resultados" element={<ResultadosAdmin />} />
               <Route path="conduta" element={<Conduta />} />
               <Route path="taca" element={<TacaAdmin />} />
