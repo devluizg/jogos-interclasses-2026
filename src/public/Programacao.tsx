@@ -1,14 +1,11 @@
 import { useMemo, useState } from 'react'
-import { CalendarDays, Clock, MapPin } from 'lucide-react'
+import { CalendarDays, Clock, MapPin, Search } from 'lucide-react'
 import type { BlocoProgramacao } from '@/lib/chaveamentosTypes'
 import { useAsync } from '@/lib/useAsync'
 import { supabase } from '@/lib/supabase'
 import type { Programacao as Jogo } from '@/lib/types'
-import {
-  carregarChaveamentosPublicos,
-  extrairBlocosProgramacao,
-  statusParaBadge,
-} from './chaveamentosPublico'
+import { BlocoProgramacaoCard, ehLogisticaOuIntervalo } from './BlocoProgramacaoCard'
+import { carregarChaveamentosPublicos, extrairBlocosProgramacao } from './chaveamentosPublico'
 import { useRealtime, useSeo } from './hooks'
 import { ParticipantesPartida } from './ParticipantesPartida'
 import { chaveDia, dataCurta, dataLonga, diaSemanaCurto, horaCurta, rotuloFase, tituloCategoria } from './utils'
@@ -23,6 +20,7 @@ import {
 } from './ui'
 
 const ORDEM_DIAS = ['Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira']
+const TURMAS_OPCOES = ['101', '102', '103', '104', '201', '202', '203', '204', '301', '302']
 
 type DadosProg = {
   jogos: Jogo[]
@@ -37,6 +35,8 @@ export default function Programacao() {
 
   const [dia, setDia] = useState('todos')
   const [modalidade, setModalidade] = useState('todas')
+  const [turma, setTurma] = useState('todas')
+  const [busca, setBusca] = useState('')
 
   const dados = useAsync<DadosProg>(async () => {
     const [resJogos, chaveamentos] = await Promise.all([
@@ -51,7 +51,7 @@ export default function Programacao() {
     if (resJogos.error) throw resJogos.error
     return {
       jogos: (resJogos.data ?? []) as Jogo[],
-      blocos: extrairBlocosProgramacao(chaveamentos),
+      blocos: extrairBlocosProgramacao(chaveamentos).filter((b) => !ehLogisticaOuIntervalo(b)),
     }
   })
 
@@ -60,6 +60,8 @@ export default function Programacao() {
   const jogos = dados.data?.jogos ?? []
   const blocos = dados.data?.blocos ?? []
   const usarPlanilha = jogos.length === 0 && blocos.length > 0
+  const termo = busca.trim().toLowerCase()
+  const filtroPessoalAtivo = turma !== 'todas' || Boolean(termo)
 
   // --- Modo Planilha (Programação Geral do /admin/chaveamentos) ---
   const diasBlocos = useMemo(() => {
@@ -83,12 +85,30 @@ export default function Programacao() {
   const gruposBlocos = useMemo(() => {
     return diasBlocos
       .filter(([d]) => dia === 'todos' || d === dia)
-      .map(([d, lista]) => [
-        d,
-        lista.filter((b) => modalidade === 'todas' || b.modalidade === modalidade),
-      ] as [string, BlocoProgramacao[]])
-      .filter(([, lista]) => lista.length > 0)
-  }, [diasBlocos, dia, modalidade])
+      .map(([d, lista]) => {
+        const filtrada = lista.filter((b) => {
+          if (modalidade !== 'todas' && b.modalidade !== modalidade) return false
+          const textoCompleto = `${b.modalidade} ${b.categoriaFase} ${b.confronto} ${b.local}`.toLowerCase()
+          if (turma !== 'todas' && !new RegExp(`\\b${turma}\\b`).test(textoCompleto)) return false
+          if (termo && !textoCompleto.includes(termo)) return false
+          return true
+        })
+        // Agrupa internamente por Manhã / Tarde mantendo a ordem
+        const porTurno = new Map<string, BlocoProgramacao[]>()
+        for (const item of filtrada) {
+          const chaveTurno = item.turno.toLowerCase().includes('tarde') ? 'Tarde' : 'Manhã'
+          const arr = porTurno.get(chaveTurno)
+          if (arr) arr.push(item)
+          else porTurno.set(chaveTurno, [item])
+        }
+        return {
+          dia: d,
+          total: filtrada.length,
+          turnos: [...porTurno.entries()],
+        }
+      })
+      .filter((g) => g.total > 0)
+  }, [diasBlocos, dia, modalidade, turma, termo])
 
   // --- Modo Partidas (tabela partidas do /admin/partidas) ---
   const diasJogos = useMemo(() => {
@@ -122,13 +142,14 @@ export default function Programacao() {
 
   const totalItens = usarPlanilha ? blocos.length : jogos.length
   const totalModalidades = usarPlanilha ? modalidadesBlocos.length : modalidadesJogos.length
+  const temFiltro = dia !== 'todos' || modalidade !== 'todas' || turma !== 'todas' || Boolean(termo)
 
   return (
     <>
       <PageHero
         chapeu="Tabela oficial"
         titulo="Programação"
-        descricao="Jogos, horários e locais divulgados pela organização."
+        descricao="Filtre pela sua turma, modalidade ou nome para encontrar seu jogo rapidamente."
       >
         <div className="flex flex-wrap gap-2 text-xs text-slate-300">
           <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1">
@@ -174,34 +195,66 @@ export default function Programacao() {
                   </button>
                 ))}
           </div>
-          <div className="mt-2 flex items-center gap-2 border-t border-noite-900/5 px-1 pt-2">
-            <label htmlFor="modalidade" className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              Modalidade
-            </label>
-            <select
-              id="modalidade"
-              value={modalidade}
-              onChange={(e) => setModalidade(e.target.value)}
-              className="min-h-11 flex-1 rounded-lg border border-noite-900/15 bg-white px-2 text-sm text-noite-900 sm:flex-none"
-            >
-              <option value="todas">Todas</option>
-              {usarPlanilha
-                ? modalidadesBlocos.map((nome) => (
-                    <option key={nome} value={nome}>{nome}</option>
-                  ))
-                : modalidadesJogos.map(([slug, nome]) => (
-                    <option key={slug} value={slug}>{nome}</option>
-                  ))}
-            </select>
-            {(dia !== 'todos' || modalidade !== 'todas') ? (
-              <button
-                type="button"
-                onClick={() => { setDia('todos'); setModalidade('todas') }}
-                className="min-h-11 px-2 text-xs font-semibold text-brand-700 hover:underline"
-              >
-                Limpar
-              </button>
+
+          <div className="mt-2.5 grid gap-2 border-t border-noite-900/5 pt-2.5 sm:grid-cols-3">
+            {usarPlanilha ? (
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                <input
+                  type="search"
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  placeholder="Buscar seu nome ou local…"
+                  className="min-h-11 w-full rounded-lg border border-noite-900/15 bg-white pl-9 pr-3 text-sm text-noite-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none"
+                />
+              </div>
             ) : null}
+
+            {usarPlanilha ? (
+              <select
+                aria-label="Filtrar por turma"
+                value={turma}
+                onChange={(e) => setTurma(e.target.value)}
+                className="min-h-11 w-full rounded-lg border border-noite-900/15 bg-white px-3 text-sm text-noite-900"
+              >
+                <option value="todas">Minha Turma: Todas</option>
+                {TURMAS_OPCOES.map((t) => (
+                  <option key={t} value={t}>Turma {t}</option>
+                ))}
+              </select>
+            ) : null}
+
+            <div className="flex items-center gap-2">
+              <select
+                aria-label="Filtrar por modalidade"
+                value={modalidade}
+                onChange={(e) => setModalidade(e.target.value)}
+                className="min-h-11 flex-1 rounded-lg border border-noite-900/15 bg-white px-3 text-sm text-noite-900"
+              >
+                <option value="todas">Modalidade: Todas</option>
+                {usarPlanilha
+                  ? modalidadesBlocos.map((nome) => (
+                      <option key={nome} value={nome}>{nome}</option>
+                    ))
+                  : modalidadesJogos.map(([slug, nome]) => (
+                      <option key={slug} value={slug}>{nome}</option>
+                    ))}
+              </select>
+              {temFiltro ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDia('todos')
+                    setModalidade('todas')
+                    setTurma('todas')
+                    setBusca('')
+                  }}
+                  className="min-h-11 shrink-0 px-2 text-xs font-semibold text-brand-700 hover:underline"
+                >
+                  Limpar
+                </button>
+              ) : null}
+            </div>
           </div>
         </Card>
 
@@ -213,57 +266,38 @@ export default function Programacao() {
           gruposBlocos.length === 0 ? (
             <Vazio
               titulo="Nenhum jogo encontrado"
-              texto="Ajuste os filtros de dia ou modalidade."
+              texto="Ajuste os filtros de dia, turma, modalidade ou busca."
               icone={<CalendarDays className="h-7 w-7" />}
             />
           ) : (
-            <div className="space-y-8">
-              {gruposBlocos.map(([nomeDia, lista]) => (
-                <section key={nomeDia} aria-labelledby={`dia-${nomeDia}`}>
-                  <div className="mb-3 flex items-baseline justify-between gap-3">
-                    <h2 id={`dia-${nomeDia}`} className="font-display text-2xl font-bold uppercase tracking-tight text-noite-900">
-                      {nomeDia}
+            <div className="space-y-9">
+              {gruposBlocos.map((grupo) => (
+                <section key={grupo.dia} aria-labelledby={`dia-${grupo.dia}`}>
+                  <div className="mb-4 flex items-baseline justify-between gap-3 border-b border-noite-900/10 pb-2">
+                    <h2 id={`dia-${grupo.dia}`} className="font-display text-2xl font-bold uppercase tracking-tight text-noite-900 sm:text-3xl">
+                      {grupo.dia}
                     </h2>
                     <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                      {lista.length} {lista.length === 1 ? 'atividade' : 'atividades'}
+                      {grupo.total} {grupo.total === 1 ? 'atividade' : 'atividades'}
                     </span>
                   </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {lista.map((bloco) => (
-                      <Card key={bloco.id} className="overflow-hidden">
-                        <div className="flex">
-                          <div className="flex w-[78px] shrink-0 flex-col items-center justify-center bg-noite-950 px-2 py-4 text-center text-white">
-                            <Clock className="mb-1 h-3.5 w-3.5 text-brand-400" />
-                            <span className="font-display text-lg font-extrabold leading-tight">
-                              {bloco.horario.split('–')[0]?.trim() || '—'}
-                            </span>
-                            <span className="mt-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">
-                              {bloco.turno}
-                            </span>
-                          </div>
-                          <div className="min-w-0 flex-1 p-3 sm:p-4">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-700">
-                                  {bloco.modalidade}
-                                </p>
-                                <p className="mt-0.5 text-xs font-medium text-slate-600">
-                                  {bloco.categoriaFase}
-                                </p>
-                              </div>
-                              <StatusBadge status={statusParaBadge(bloco.status)} />
-                            </div>
 
-                            <p className="mt-2.5 text-sm font-medium leading-snug text-noite-900">
-                              {bloco.confronto}
-                            </p>
-
-                            <p className="mt-2.5 flex items-center gap-1.5 text-xs text-slate-500">
-                              <MapPin className="h-3.5 w-3.5 shrink-0" /> {bloco.local} · {bloco.horario}
-                            </p>
-                          </div>
+                  <div className="space-y-6">
+                    {grupo.turnos.map(([nomeTurno, lista]) => (
+                      <div key={nomeTurno}>
+                        <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.2em] text-brand-700">
+                          {nomeTurno}
+                        </p>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {lista.map((bloco) => (
+                            <BlocoProgramacaoCard
+                              key={bloco.id}
+                              bloco={bloco}
+                              abrirAutomatico={filtroPessoalAtivo}
+                            />
+                          ))}
                         </div>
-                      </Card>
+                      </div>
                     ))}
                   </div>
                 </section>

@@ -44,11 +44,11 @@ import {
 } from './ui'
 
 import type { BlocoProgramacao } from '@/lib/chaveamentosTypes'
+import { BlocoProgramacaoCard, ehLogisticaOuIntervalo } from './BlocoProgramacaoCard'
 import {
   carregarChaveamentosPublicos,
   extrairBlocosProgramacao,
   extrairResumosChaveamentos,
-  statusParaBadge,
   type ResumoAbaPublica,
 } from './chaveamentosPublico'
 
@@ -113,7 +113,12 @@ export default function Home() {
       .slice(0, 4)
 
     const blocos = extrairBlocosProgramacao(chaveamentos)
-      .filter((b) => !b.status.toLowerCase().includes('conclu') && b.tipo.toLowerCase() !== 'recreação')
+      .filter(
+        (b) =>
+          !ehLogisticaOuIntervalo(b) &&
+          !b.status.toLowerCase().includes('conclu') &&
+          b.tipo.toLowerCase() !== 'recreação',
+      )
       .sort((a, b) => {
         const andA = a.status.toLowerCase().includes('andamento')
         const andB = b.status.toLowerCase().includes('andamento')
@@ -311,27 +316,7 @@ export default function Home() {
         ) : proximosBlocos.length > 0 ? (
           <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-2 md:gap-4 md:overflow-visible md:px-0 md:pb-0">
             {proximosBlocos.map((bloco) => (
-              <Card key={bloco.id} className="w-[82vw] max-w-sm shrink-0 snap-start p-4 md:w-auto md:max-w-none">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-700">
-                      {bloco.modalidade}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {bloco.dia} · <Clock className="mb-0.5 inline h-3.5 w-3.5" /> {bloco.horario}
-                    </p>
-                  </div>
-                  <StatusBadge status={statusParaBadge(bloco.status)} />
-                </div>
-
-                <p className="mt-3 line-clamp-2 text-sm font-medium leading-snug text-noite-900">
-                  {bloco.confronto}
-                </p>
-
-                <p className="mt-3 text-xs text-slate-500">
-                  <MapPin className="mb-0.5 inline h-3.5 w-3.5" /> {bloco.local} · {bloco.categoriaFase}
-                </p>
-              </Card>
+              <BlocoProgramacaoCard key={bloco.id} bloco={bloco} compacto />
             ))}
           </div>
         ) : (
