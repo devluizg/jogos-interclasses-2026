@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react'
 import { Check, Medal, Search, Trophy } from 'lucide-react'
 import { Badge, Card, CardHeader, Input, Select, Table, Td, Th } from '@/components/ui'
 import {
+  calcularArtilharia,
   calcularFreeFire,
+  calcularMedalhas,
   calcularQuiz,
   calcularTempo,
   resolverBracket,
@@ -10,9 +12,11 @@ import {
   type PodioCalculado,
 } from '@/lib/chaveamentosEngine'
 import type {
+  AbaArtilharia,
   AbaFreeFire,
   AbaGruposMataMata,
   AbaMataMata,
+  AbaMedalhas,
   AbaProgramacao,
   AbaQuiz,
   AbaRepescagem,
@@ -1212,5 +1216,234 @@ export function ElencosView({ elencos, onChange }: { elencos: ElencoAba; onChang
         </tbody>
       </Table>
     </Card>
+  )
+}
+
+export function ArtilhariaView({ aba, onChange }: { aba: AbaArtilharia; onChange: (next: AbaArtilharia) => void }) {
+  const [busca, setBusca] = useState('')
+  const classificacao = useMemo(() => calcularArtilharia(aba), [aba])
+  const totalGols = classificacao.reduce((soma, linha) => soma + linha.total, 0)
+  const artilheiro = classificacao[0]
+
+  const filtradas = useMemo(() => {
+    const q = busca.trim().toLowerCase()
+    return q ? classificacao.filter((l) => `${l.atleta.nome} ${l.atleta.equipe} ${l.atleta.turma}`.toLowerCase().includes(q)) : classificacao
+  }, [classificacao, busca])
+
+  function atualizarGols(id: string, indice: number, valor: number | null) {
+    onChange({
+      ...aba,
+      atletas: aba.atletas.map((atleta) =>
+        atleta.id === id
+          ? { ...atleta, gols: atleta.gols.map((g, i) => (i === indice ? valor : g)) }
+          : atleta,
+      ),
+    })
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card className="p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Atletas</p>
+          <p className="mt-1 text-2xl font-bold text-slate-900">{aba.atletas.length}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Gols marcados</p>
+          <p className="mt-1 text-2xl font-bold text-slate-900">{totalGols}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Artilheiro(a)</p>
+          <p className="mt-1 text-sm font-bold leading-snug text-amber-700">
+            {artilheiro && artilheiro.total > 0 ? `${artilheiro.atleta.nome} — ${artilheiro.total} gols` : 'A definir'}
+          </p>
+        </Card>
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+              <Trophy className="h-4 w-4 text-brand-600" /> {aba.titulo}
+            </h3>
+            <p className="text-xs text-slate-500">{aba.subtitulo}</p>
+          </div>
+          <div className="relative w-full sm:w-64">
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+            <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Filtrar atleta…" className="h-8 pl-8 text-xs" />
+          </div>
+        </div>
+        <Table>
+          <thead>
+            <tr>
+              <Th>#</Th>
+              <Th>Atleta</Th>
+              <Th>Equipe</Th>
+              <Th>Turma</Th>
+              {aba.colunasPartidas.map((col) => (
+                <Th key={col} className="text-center">{col}</Th>
+              ))}
+              <Th className="text-center">Total</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtradas.map((linha) => (
+              <tr key={linha.atleta.id} className={linha.pos <= 3 && linha.total > 0 ? 'bg-amber-50/50' : ''}>
+                <Td className="text-center font-bold text-slate-500">{linha.pos}</Td>
+                <Td className="font-medium text-slate-900">{linha.atleta.nome}</Td>
+                <Td className="text-xs text-slate-600">{linha.atleta.equipe}</Td>
+                <Td className="text-xs text-slate-500">{linha.atleta.turma}</Td>
+                {linha.atleta.gols.map((gols, i) => (
+                  <Td key={i} className="text-center">
+                    <InputPlanilha value={gols} onChange={(n) => atualizarGols(linha.atleta.id, i, n)} step="1" />
+                  </Td>
+                ))}
+                <Td className="text-center text-sm font-bold text-slate-900">{linha.total}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </Card>
+    </div>
+  )
+}
+
+export function MedalhasView({ aba, onChange }: { aba: AbaMedalhas; onChange: (next: AbaMedalhas) => void }) {
+  const classificacao = useMemo(() => calcularMedalhas(aba), [aba])
+
+  function atualizarPeso(chave: keyof typeof aba.pesos, valor: number | null) {
+    onChange({ ...aba, pesos: { ...aba.pesos, [chave]: valor ?? 0 } })
+  }
+
+  function atualizarPodio(id: string, patch: Partial<AbaMedalhas['podios'][number]>) {
+    onChange({ ...aba, podios: aba.podios.map((p) => (p.id === id ? { ...p, ...patch } : p)) })
+  }
+
+  const inputCurto = 'w-28 rounded border border-slate-200 px-1.5 py-1 text-xs'
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card className="p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pódios lançados</p>
+          <p className="mt-1 text-2xl font-bold text-slate-900">
+            {classificacao.podiosLancados}/{classificacao.totalPodios}
+          </p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Modalidades</p>
+          <p className="mt-1 text-2xl font-bold text-slate-900">{aba.delegacoes.length}</p>
+          <p className="text-xs text-slate-500">delegações na classificação</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Campeã geral</p>
+          <p className="mt-1 text-sm font-bold text-amber-700">
+            {classificacao.linhas[0] && classificacao.linhas[0].pontos > 0
+              ? `${classificacao.linhas[0].turma} — ${classificacao.linhas[0].pontos} pts`
+              : 'A definir'}
+          </p>
+        </Card>
+      </div>
+
+      <Card className="p-4">
+        <CardHeader titulo="Pesos por medalha" descricao="A classificação é recalculada automaticamente ao alterar os pesos." />
+        <div className="flex flex-wrap items-center gap-6">
+          {([
+            ['ouro', 'Ouro'],
+            ['prata', 'Prata'],
+            ['bronze', 'Bronze'],
+          ] as const).map(([chave, rotulo]) => (
+            <label key={chave} className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+              {rotulo}
+              <InputPlanilha value={aba.pesos[chave]} onChange={(n) => atualizarPeso(chave, n)} step="1" />
+            </label>
+          ))}
+        </div>
+      </Card>
+
+      <Card className="overflow-hidden">
+        <div className="border-b border-slate-200 px-4 py-3">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <Medal className="h-4 w-4 text-brand-600" /> Classificação Geral por Delegação
+          </h3>
+          <p className="text-xs text-slate-500">Desempate: pontos → ouros → pratas → bronzes → turma.</p>
+        </div>
+        <Table>
+          <thead>
+            <tr>
+              <Th>#</Th>
+              <Th>Delegação</Th>
+              <Th>Série</Th>
+              <Th className="text-center">Ouro</Th>
+              <Th className="text-center">Prata</Th>
+              <Th className="text-center">Bronze</Th>
+              <Th className="text-center">Pontos</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {classificacao.linhas.map((linha) => (
+              <tr key={linha.turma} className={linha.pos === 1 && linha.pontos > 0 ? 'bg-amber-50/60' : ''}>
+                <Td className="text-center font-bold text-slate-500">{linha.pos}</Td>
+                <Td className="font-medium text-slate-900">{linha.turma}</Td>
+                <Td className="text-xs text-slate-500">{linha.serie}</Td>
+                <Td className="text-center text-amber-700">{linha.ouro}</Td>
+                <Td className="text-center text-slate-600">{linha.prata}</Td>
+                <Td className="text-center text-orange-700">{linha.bronze}</Td>
+                <Td className="text-center text-sm font-bold text-slate-900">{linha.pontos}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </Card>
+
+      <Card className="overflow-hidden">
+        <div className="border-b border-slate-200 px-4 py-3">
+          <h3 className="text-sm font-semibold text-slate-900">Lançamento de Pódios ({aba.podios.length})</h3>
+          <p className="text-xs text-slate-500">
+            Preencha ouro, prata e bronze com a delegação (ex.: Turma 103). Co-participantes são informativos e não pontuam.
+          </p>
+        </div>
+        <Table>
+          <thead>
+            <tr>
+              <Th>Modalidade</Th>
+              <Th>Categoria</Th>
+              <Th>Ouro</Th>
+              <Th>Prata</Th>
+              <Th>Bronze</Th>
+              <Th>Co-participantes</Th>
+              <Th>Status</Th>
+              <Th>Obs.</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {aba.podios.map((podio) => (
+              <tr key={podio.id}>
+                <Td className="whitespace-nowrap text-xs font-medium text-slate-800">{podio.modalidade}</Td>
+                <Td className="whitespace-nowrap text-xs text-slate-500">{podio.categoria}</Td>
+                <Td><Input value={podio.ouro} onChange={(e) => atualizarPodio(podio.id, { ouro: e.target.value })} placeholder="—" className={inputCurto} /></Td>
+                <Td><Input value={podio.prata} onChange={(e) => atualizarPodio(podio.id, { prata: e.target.value })} placeholder="—" className={inputCurto} /></Td>
+                <Td><Input value={podio.bronze} onChange={(e) => atualizarPodio(podio.id, { bronze: e.target.value })} placeholder="—" className={inputCurto} /></Td>
+                <Td>
+                  <div className="flex flex-col gap-1">
+                    <Input value={podio.coOuro} onChange={(e) => atualizarPodio(podio.id, { coOuro: e.target.value })} placeholder="Co-ouro" className={inputCurto} />
+                    <Input value={podio.coPrata} onChange={(e) => atualizarPodio(podio.id, { coPrata: e.target.value })} placeholder="Co-prata" className={inputCurto} />
+                    <Input value={podio.coBronze} onChange={(e) => atualizarPodio(podio.id, { coBronze: e.target.value })} placeholder="Co-bronze" className={inputCurto} />
+                  </div>
+                </Td>
+                <Td>
+                  <Select value={podio.status} onChange={(e) => atualizarPodio(podio.id, { status: e.target.value })} className="h-8 text-xs">
+                    <option value="Pendente">Pendente</option>
+                    <option value="Em andamento">Em andamento</option>
+                    <option value="Lançado">Lançado</option>
+                  </Select>
+                </Td>
+                <Td><Input value={podio.obs} onChange={(e) => atualizarPodio(podio.id, { obs: e.target.value })} placeholder="—" className={inputCurto} /></Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </Card>
+    </div>
   )
 }

@@ -13,6 +13,7 @@ const LINKS = [
   { para: '/programacao', rotulo: 'Programação' },
   { para: '/classificacao', rotulo: 'Classificação' },
   { para: '/resultados', rotulo: 'Resultados' },
+  { para: '/medalhas', rotulo: 'Medalhas' },
   { para: '/modalidades', rotulo: 'Modalidades' },
   { para: '/noticias', rotulo: 'Notícias' },
   { para: '/documentos', rotulo: 'Documentos' },

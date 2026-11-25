@@ -12,10 +12,12 @@ import {
   useToast,
 } from '@/components/ui'
 import {
+  ArtilhariaView,
   BracketView,
   ElencosView,
   FreeFireView,
   GruposMataMataView,
+  MedalhasView,
   ProgramacaoView,
   QuizView,
   TempoView,
@@ -241,6 +243,12 @@ export default function Chaveamentos() {
           ) : null}
           {abaSelecionada.tipo === 'programacao' ? (
             <ProgramacaoView aba={abaSelecionada} onChange={(next) => atualizarAba(abaIndex, next)} />
+          ) : null}
+          {abaSelecionada.tipo === 'artilharia' ? (
+            <ArtilhariaView aba={abaSelecionada} onChange={(next) => atualizarAba(abaIndex, next)} />
+          ) : null}
+          {abaSelecionada.tipo === 'medalhas' ? (
+            <MedalhasView aba={abaSelecionada} onChange={(next) => atualizarAba(abaIndex, next)} />
           ) : null}
         </>
       ) : null}

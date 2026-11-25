@@ -28,6 +28,7 @@ const Home = lazy(() => import('@/public/Home'))
 const Programacao = lazy(() => import('@/public/Programacao'))
 const Classificacao = lazy(() => import('@/public/Classificacao'))
 const ResultadosPublicos = lazy(() => import('@/public/Resultados'))
+const Medalhas = lazy(() => import('@/public/Medalhas'))
 const ModalidadesPublicas = lazy(() => import('@/public/Modalidades'))
 const ModalidadePublica = lazy(() => import('@/public/ModalidadePublica'))
 const Noticias = lazy(() => import('@/public/Noticias'))
@@ -120,6 +121,7 @@ export default function App() {
               <Route path="/programacao" element={<Programacao />} />
               <Route path="/classificacao" element={<Classificacao />} />
               <Route path="/resultados" element={<ResultadosPublicos />} />
+              <Route path="/medalhas" element={<Medalhas />} />
               <Route path="/modalidades" element={<ModalidadesPublicas />} />
               <Route path="/modalidades/:slug" element={<ModalidadePublica />} />
               <Route path="/noticias" element={<Noticias />} />

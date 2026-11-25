@@ -1,7 +1,10 @@
 import type {
+  AbaArtilharia,
+  AtletaArtilharia,
   AbaFreeFire,
   AbaGruposMataMata,
   AbaMataMata,
+  AbaMedalhas,
   AbaQuiz,
   AbaRepescagem,
   AbaTempo,
@@ -552,4 +555,110 @@ export function calcularQuiz(aba: AbaQuiz) {
   }
 
   return { ordenadas, podio }
+}
+
+export type LinhaArtilharia = {
+  pos: number
+  atleta: AtletaArtilharia
+  total: number
+}
+
+export function calcularArtilharia(aba: AbaArtilharia): LinhaArtilharia[] {
+  return aba.atletas
+    .map((atleta) => ({
+      atleta,
+      total: atleta.gols.reduce<number>((soma, gols) => soma + (gols ?? 0), 0),
+    }))
+    .sort(
+      (a, b) =>
+        b.total - a.total || a.atleta.nome.localeCompare(b.atleta.nome, 'pt-BR'),
+    )
+    .map((linha, index) => ({ pos: index + 1, ...linha }))
+}
+
+export type LinhaMedalhas = {
+  pos: number
+  turma: string
+  serie: string
+  ouro: number
+  prata: number
+  bronze: number
+  pontos: number
+}
+
+export type ClassificacaoMedalhas = {
+  linhas: LinhaMedalhas[]
+  totalPodios: number
+  podiosLancados: number
+}
+
+function seriePorTurma(turma: string): string {
+  const numero = turma.replace(/\D/g, '').slice(0, 1)
+  if (numero === '1') return '1º Ano'
+  if (numero === '2') return '2º Ano'
+  if (numero === '3') return '3º Ano'
+  return ''
+}
+
+export function calcularMedalhas(aba: AbaMedalhas): ClassificacaoMedalhas {
+  const linhas = new Map<string, Omit<LinhaMedalhas, 'pos'>>()
+  const garante = (turma: string) => {
+    let linha = linhas.get(turma)
+    if (!linha) {
+      linha = {
+        turma,
+        serie: seriePorTurma(turma),
+        ouro: 0,
+        prata: 0,
+        bronze: 0,
+        pontos: 0,
+      }
+      linhas.set(turma, linha)
+    }
+    return linha
+  }
+
+  for (const delegacao of aba.delegacoes) {
+    const linha = garante(delegacao.turma)
+    if (delegacao.serie) linha.serie = delegacao.serie
+  }
+
+  let podiosLancados = 0
+  for (const podio of aba.podios) {
+    const temAlgum = Boolean(podio.ouro || podio.prata || podio.bronze)
+    if (temAlgum) podiosLancados += 1
+    for (const [campo, chave] of [
+      ['ouro', 'ouro'],
+      ['prata', 'prata'],
+      ['bronze', 'bronze'],
+    ] as const) {
+      const valor = podio[campo].trim()
+      if (!valor) continue
+      garante(valor)[chave] += 1
+    }
+  }
+
+  const ordenadas = [...linhas.values()]
+    .map((linha) => ({
+      ...linha,
+      pontos:
+        linha.ouro * aba.pesos.ouro +
+        linha.prata * aba.pesos.prata +
+        linha.bronze * aba.pesos.bronze,
+    }))
+    .sort(
+      (a, b) =>
+        b.pontos - a.pontos ||
+        b.ouro - a.ouro ||
+        b.prata - a.prata ||
+        b.bronze - a.bronze ||
+        a.turma.localeCompare(b.turma, 'pt-BR', { numeric: true }),
+    )
+    .map((linha, index) => ({ pos: index + 1, ...linha }))
+
+  return {
+    linhas: ordenadas,
+    totalPodios: aba.podios.length,
+    podiosLancados,
+  }
 }

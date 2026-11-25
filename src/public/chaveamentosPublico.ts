@@ -7,6 +7,8 @@ import {
   type PodioCalculado,
 } from '@/lib/chaveamentosEngine'
 import type {
+  AbaArtilharia,
+  AbaMedalhas,
   AbaPlanilha,
   AbaProgramacao,
   BlocoProgramacao,
@@ -71,9 +73,9 @@ function definido(valor: string): boolean {
 export function extrairResumosChaveamentos(lista: ChaveamentoPublico[]): ResumoAbaPublica[] {
   const saida: ResumoAbaPublica[] = []
   for (const item of lista) {
-    if (item.tipo === 'programacao') continue
+    if (item.tipo === 'programacao' || item.tipo === 'artilharia' || item.tipo === 'medalhas') continue
     for (const aba of item.abas) {
-      if (aba.tipo === 'programacao') continue
+      if (aba.tipo === 'programacao' || aba.tipo === 'artilharia' || aba.tipo === 'medalhas') continue
       const podio = podioAba(aba)
       const temPodio = definido(podio.primeiro) || definido(podio.segundo) || definido(podio.terceiro)
       saida.push({
@@ -86,6 +88,25 @@ export function extrairResumosChaveamentos(lista: ChaveamentoPublico[]): ResumoA
         temPodio,
         updated_at: item.updated_at,
       })
+    }
+  }
+  return saida
+}
+
+export function extrairAbaMedalhas(lista: ChaveamentoPublico[]): AbaMedalhas | null {
+  for (const item of lista) {
+    for (const aba of item.abas) {
+      if (aba.tipo === 'medalhas') return aba
+    }
+  }
+  return null
+}
+
+export function extrairAbasArtilharia(lista: ChaveamentoPublico[]): AbaArtilharia[] {
+  const saida: AbaArtilharia[] = []
+  for (const item of lista) {
+    for (const aba of item.abas) {
+      if (aba.tipo === 'artilharia') saida.push(aba)
     }
   }
   return saida

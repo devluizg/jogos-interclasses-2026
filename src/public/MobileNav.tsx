@@ -24,7 +24,7 @@ const PRINCIPAIS = [
   { para: '/resultados', rotulo: 'Placar', icone: Medal },
 ]
 
-const CAMINHOS_MAIS = ['/modalidades', '/noticias', '/documentos', '/taca']
+const CAMINHOS_MAIS = ['/modalidades', '/medalhas', '/noticias', '/documentos', '/taca']
 
 function BotaoInstalar() {
   const { podeInstalar, instalado, ios, instalar } = usePwaInstall()
@@ -76,6 +76,7 @@ export default function MobileNav() {
   const inicioToque = useRef<number | null>(null)
 
   const extras = [
+    { para: '/medalhas', rotulo: 'Quadro de Medalhas', icone: Medal },
     { para: '/modalidades', rotulo: 'Modalidades', icone: Trophy },
     { para: '/noticias', rotulo: 'Notícias', icone: Newspaper },
     { para: '/documentos', rotulo: 'Documentos', icone: FileText },

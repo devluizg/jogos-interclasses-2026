@@ -6,6 +6,8 @@ export type TipoChaveamento =
   | 'free_fire'
   | 'quiz'
   | 'programacao'
+  | 'artilharia'
+  | 'medalhas'
 
 export type EquipeGrupo = {
   cod: string
@@ -206,6 +208,60 @@ export type AbaProgramacao = {
   blocos: BlocoProgramacao[]
 }
 
+export type AtletaArtilharia = {
+  id: string
+  nome: string
+  equipe: string
+  turma: string
+  gols: (number | null)[]
+}
+
+export type AbaArtilharia = {
+  tipo: 'artilharia'
+  id: string
+  titulo: string
+  subtitulo: string
+  modalidade: string
+  categoria: string
+  colunasPartidas: string[]
+  atletas: AtletaArtilharia[]
+}
+
+export type PodioMedalha = {
+  id: string
+  modalidade: string
+  categoria: string
+  ouro: string
+  prata: string
+  bronze: string
+  coOuro: string
+  coPrata: string
+  coBronze: string
+  status: string
+  obs: string
+}
+
+export type DelegacaoMedalha = {
+  turma: string
+  serie: string
+}
+
+export type PesosMedalha = {
+  ouro: number
+  prata: number
+  bronze: number
+}
+
+export type AbaMedalhas = {
+  tipo: 'medalhas'
+  id: string
+  titulo: string
+  subtitulo: string
+  pesos: PesosMedalha
+  delegacoes: DelegacaoMedalha[]
+  podios: PodioMedalha[]
+}
+
 export type AbaPlanilha =
   | AbaGruposMataMata
   | AbaMataMata
@@ -214,6 +270,8 @@ export type AbaPlanilha =
   | AbaFreeFire
   | AbaQuiz
   | AbaProgramacao
+  | AbaArtilharia
+  | AbaMedalhas
 
 export type ElencoLinha = {
   valores: string[]
