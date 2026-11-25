@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
-import { Check, Medal, Search, Trophy } from 'lucide-react'
-import { Badge, Card, CardHeader, Input, Select, Table, Td, Th } from '@/components/ui'
+import { Check, Medal, Plus, Search, Trash2, Trophy } from 'lucide-react'
+import { Badge, Button, Card, CardHeader, Input, Select, Table, Td, Th } from '@/components/ui'
 import {
   calcularArtilharia,
+  calcularCartoes,
   calcularFreeFire,
   calcularMedalhas,
   calcularQuiz,
@@ -13,6 +14,7 @@ import {
 } from '@/lib/chaveamentosEngine'
 import type {
   AbaArtilharia,
+  AbaCartoes,
   AbaFreeFire,
   AbaGruposMataMata,
   AbaMataMata,
@@ -1439,6 +1441,153 @@ export function MedalhasView({ aba, onChange }: { aba: AbaMedalhas; onChange: (n
                   </Select>
                 </Td>
                 <Td><Input value={podio.obs} onChange={(e) => atualizarPodio(podio.id, { obs: e.target.value })} placeholder="—" className={inputCurto} /></Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </Card>
+    </div>
+  )
+}
+
+export function CartoesView({ aba, onChange }: { aba: AbaCartoes; onChange: (next: AbaCartoes) => void }) {
+  const [busca, setBusca] = useState('')
+  const ranking = useMemo(() => calcularCartoes(aba), [aba])
+  const amarelos = aba.cartoes.filter((c) => c.tipo === 'amarelo').length
+  const vermelhos = aba.cartoes.filter((c) => c.tipo === 'vermelho').length
+
+  const filtrados = useMemo(() => {
+    const q = busca.trim().toLowerCase()
+    return q
+      ? aba.cartoes.filter((c) => `${c.nome} ${c.turma} ${c.categoria} ${c.jogo}`.toLowerCase().includes(q))
+      : aba.cartoes
+  }, [aba.cartoes, busca])
+
+  function atualizar(id: string, patch: Partial<AbaCartoes['cartoes'][number]>) {
+    onChange({
+      ...aba,
+      cartoes: aba.cartoes.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+    })
+  }
+
+  function adicionar() {
+    const cartao: AbaCartoes['cartoes'][number] = {
+      id: `cartao-${Date.now()}`,
+      nome: '',
+      turma: '',
+      categoria: '',
+      jogo: '',
+      tipo: 'amarelo',
+      minuto: '',
+      obs: '',
+    }
+    onChange({ ...aba, cartoes: [...aba.cartoes, cartao] })
+  }
+
+  function remover(id: string) {
+    onChange({ ...aba, cartoes: aba.cartoes.filter((c) => c.id !== id) })
+  }
+
+  const input = 'w-28 rounded border border-slate-200 px-1.5 py-1 text-xs'
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card className="p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Amarelos</p>
+          <p className="mt-1 text-2xl font-bold text-amber-600">{amarelos}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vermelhos</p>
+          <p className="mt-1 text-2xl font-bold text-red-600">{vermelhos}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Atletas sancionados</p>
+          <p className="mt-1 text-2xl font-bold text-slate-900">{ranking.length}</p>
+        </Card>
+      </div>
+
+      {ranking.length > 0 ? (
+        <Card className="overflow-hidden">
+          <div className="border-b border-slate-200 px-4 py-3">
+            <h3 className="text-sm font-semibold text-slate-900">Ranking de cartões</h3>
+          </div>
+          <Table>
+            <thead>
+              <tr>
+                <Th>#</Th>
+                <Th>Atleta</Th>
+                <Th>Turma</Th>
+                <Th className="text-center">Amarelos</Th>
+                <Th className="text-center">Vermelhos</Th>
+                <Th className="text-center">Total</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {ranking.slice(0, 10).map((linha) => (
+                <tr key={`${linha.nome}-${linha.turma}`}>
+                  <Td className="text-center font-bold text-slate-500">{linha.pos}</Td>
+                  <Td className="font-medium text-slate-900">{linha.nome || '—'}</Td>
+                  <Td className="text-xs text-slate-500">{linha.turma}</Td>
+                  <Td className="text-center text-amber-600">{linha.amarelos}</Td>
+                  <Td className="text-center text-red-600">{linha.vermelhos}</Td>
+                  <Td className="text-center font-bold text-slate-900">{linha.total}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </Card>
+      ) : null}
+
+      <Card className="overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">Lançamento de cartões ({aba.cartoes.length})</h3>
+            <p className="text-xs text-slate-500">{aba.subtitulo}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full sm:w-56">
+              <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+              <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Filtrar…" className="h-8 pl-8 text-xs" />
+            </div>
+            <Button size="sm" onClick={adicionar}>
+              <Plus className="h-4 w-4" /> Adicionar
+            </Button>
+          </div>
+        </div>
+        <Table>
+          <thead>
+            <tr>
+              <Th>Atleta</Th>
+              <Th>Turma</Th>
+              <Th>Categoria</Th>
+              <Th>Jogo</Th>
+              <Th>Tipo</Th>
+              <Th>Minuto</Th>
+              <Th>Obs.</Th>
+              <Th />
+            </tr>
+          </thead>
+          <tbody>
+            {filtrados.map((cartao) => (
+              <tr key={cartao.id}>
+                <Td><Input value={cartao.nome} onChange={(e) => atualizar(cartao.id, { nome: e.target.value })} placeholder="Nome" className={input} /></Td>
+                <Td><Input value={cartao.turma} onChange={(e) => atualizar(cartao.id, { turma: e.target.value })} placeholder="Turma" className="w-20 rounded border border-slate-200 px-1.5 py-1 text-xs" /></Td>
+                <Td><Input value={cartao.categoria} onChange={(e) => atualizar(cartao.id, { categoria: e.target.value })} placeholder="Categoria" className={input} /></Td>
+                <Td><Input value={cartao.jogo} onChange={(e) => atualizar(cartao.id, { jogo: e.target.value })} placeholder="Ex.: J05" className="w-20 rounded border border-slate-200 px-1.5 py-1 text-xs" /></Td>
+                <Td>
+                  <Select value={cartao.tipo} onChange={(e) => atualizar(cartao.id, { tipo: e.target.value as 'amarelo' | 'vermelho' })} className="h-7 text-xs">
+                    <option value="amarelo">Amarelo</option>
+                    <option value="vermelho">Vermelho</option>
+                  </Select>
+                </Td>
+                <Td><Input value={cartao.minuto} onChange={(e) => atualizar(cartao.id, { minuto: e.target.value })} placeholder="—" className="w-16 rounded border border-slate-200 px-1.5 py-1 text-xs" /></Td>
+                <Td><Input value={cartao.obs} onChange={(e) => atualizar(cartao.id, { obs: e.target.value })} placeholder="—" className={input} /></Td>
+                <Td>
+                  <button type="button" onClick={() => remover(cartao.id)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Remover cartão">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </Td>
               </tr>
             ))}
           </tbody>

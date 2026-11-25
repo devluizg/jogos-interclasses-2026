@@ -262,6 +262,26 @@ export type AbaMedalhas = {
   podios: PodioMedalha[]
 }
 
+export type CartaoItem = {
+  id: string
+  nome: string
+  turma: string
+  categoria: string
+  jogo: string
+  tipo: 'amarelo' | 'vermelho'
+  minuto: string
+  obs: string
+}
+
+export type AbaCartoes = {
+  tipo: 'cartoes'
+  id: string
+  titulo: string
+  subtitulo: string
+  modalidade: string
+  cartoes: CartaoItem[]
+}
+
 export type AbaPlanilha =
   | AbaGruposMataMata
   | AbaMataMata
@@ -272,6 +292,7 @@ export type AbaPlanilha =
   | AbaProgramacao
   | AbaArtilharia
   | AbaMedalhas
+  | AbaCartoes
 
 export type ElencoLinha = {
   valores: string[]

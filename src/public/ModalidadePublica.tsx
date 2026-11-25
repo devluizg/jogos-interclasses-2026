@@ -4,6 +4,8 @@ import { useAsync } from '@/lib/useAsync'
 import { supabase } from '@/lib/supabase'
 import { FORMATOS, TIPOS_MODALIDADE } from '@/lib/constantes'
 import type { Categoria, Documento, Modalidade, ParticipantePublico, Programacao } from '@/lib/types'
+import { carregarChaveamentosPublicos, type ChaveamentoPublico } from './chaveamentosPublico'
+import FichaModalidade from './FichaModalidade'
 import { useRealtime, useSeo } from './hooks'
 import { ParticipantesPartida } from './ParticipantesPartida'
 import { dataCurta, horaCurta, rotuloCategoria, tituloCategoria } from './utils'
@@ -22,6 +24,7 @@ type Detalhe = {
   participantes: ParticipantePublico[]
   documentos: Documento[]
   jogos: Programacao[]
+  chaves: ChaveamentoPublico[]
 }
 
 export default function ModalidadePublica() {
@@ -34,11 +37,12 @@ export default function ModalidadePublica() {
     if (!mod.data) return null
     const modalidade = mod.data as Modalidade
 
-    const [cats, parts, docs, jogos] = await Promise.all([
+    const [cats, parts, docs, jogos, chaves] = await Promise.all([
       supabase.from('modalidade_categorias').select('*').eq('modalidade_id', modalidade.id).eq('ativo', true).order('ordem').order('nome'),
       supabase.from('vw_participantes_publico').select('*').eq('slug', slug),
       supabase.from('documentos').select('*').eq('modalidade_id', modalidade.id).eq('publico', true).order('ordem'),
       supabase.from('vw_programacao').select('*').eq('slug', slug).in('status', ['programado', 'em_andamento', 'adiado']).order('data_hora', { ascending: true, nullsFirst: false }).limit(5),
+      carregarChaveamentosPublicos(),
     ])
     for (const r of [cats, parts, docs, jogos]) if (r.error) throw r.error
 
@@ -48,10 +52,11 @@ export default function ModalidadePublica() {
       participantes: (parts.data ?? []) as ParticipantePublico[],
       documentos: (docs.data ?? []) as Documento[],
       jogos: (jogos.data ?? []) as Programacao[],
+      chaves,
     }
   }, [slug])
 
-  useRealtime(['modalidades', 'modalidade_categorias', 'resultados', 'partidas', 'partida_participantes'], dados.reload)
+  useRealtime(['modalidades', 'modalidade_categorias', 'resultados', 'partidas', 'partida_participantes', 'chaveamentos'], dados.reload)
 
   const detalhe = dados.data
   useSeo({
@@ -91,8 +96,10 @@ export default function ModalidadePublica() {
     )
   }
 
-  const { modalidade, categorias, participantes, documentos, jogos } = detalhe
+  const { modalidade, categorias, participantes, documentos, jogos, chaves } = detalhe
   const tipo = TIPOS_MODALIDADE.find((t) => t.valor === modalidade.tipo)?.rotulo ?? modalidade.tipo
+  const aliases: Record<string, string> = { 'quiz-interdisciplinar': 'quiz' }
+  const chave = chaves.find((c) => c.slug === slug || aliases[slug ?? ''] === c.slug) ?? null
 
   return (
     <>
@@ -110,6 +117,8 @@ export default function ModalidadePublica() {
 
       <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[1.4fr_0.6fr] lg:px-8">
         <div className="space-y-5">
+          <FichaModalidade chave={chave} chaves={chaves} nomeModalidade={modalidade.nome} />
+
           <section>
             <h2 className="mb-3 font-display text-2xl font-bold uppercase tracking-tight text-noite-900">Categorias</h2>
             {categorias.length === 0 ? (

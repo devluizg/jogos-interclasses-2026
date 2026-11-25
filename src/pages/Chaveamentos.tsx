@@ -14,6 +14,7 @@ import {
 import {
   ArtilhariaView,
   BracketView,
+  CartoesView,
   ElencosView,
   FreeFireView,
   GruposMataMataView,
@@ -249,6 +250,9 @@ export default function Chaveamentos() {
           ) : null}
           {abaSelecionada.tipo === 'medalhas' ? (
             <MedalhasView aba={abaSelecionada} onChange={(next) => atualizarAba(abaIndex, next)} />
+          ) : null}
+          {abaSelecionada.tipo === 'cartoes' ? (
+            <CartoesView aba={abaSelecionada} onChange={(next) => atualizarAba(abaIndex, next)} />
           ) : null}
         </>
       ) : null}

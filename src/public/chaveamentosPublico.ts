@@ -8,6 +8,7 @@ import {
 } from '@/lib/chaveamentosEngine'
 import type {
   AbaArtilharia,
+  AbaCartoes,
   AbaMedalhas,
   AbaPlanilha,
   AbaProgramacao,
@@ -75,7 +76,7 @@ export function extrairResumosChaveamentos(lista: ChaveamentoPublico[]): ResumoA
   for (const item of lista) {
     if (item.tipo === 'programacao' || item.tipo === 'artilharia' || item.tipo === 'medalhas') continue
     for (const aba of item.abas) {
-      if (aba.tipo === 'programacao' || aba.tipo === 'artilharia' || aba.tipo === 'medalhas') continue
+      if (aba.tipo === 'programacao' || aba.tipo === 'artilharia' || aba.tipo === 'medalhas' || aba.tipo === 'cartoes') continue
       const podio = podioAba(aba)
       const temPodio = definido(podio.primeiro) || definido(podio.segundo) || definido(podio.terceiro)
       saida.push({
@@ -110,6 +111,12 @@ export function extrairAbasArtilharia(lista: ChaveamentoPublico[]): AbaArtilhari
     }
   }
   return saida
+}
+
+export function extrairCartoes(lista: ChaveamentoPublico[], slug?: string): AbaCartoes[] {
+  return lista
+    .filter((item) => !slug || item.slug === slug)
+    .flatMap((item) => item.abas.flatMap((aba) => (aba.tipo === 'cartoes' ? [aba] : [])))
 }
 
 export function statusParaBadge(status: string): string {

@@ -1,5 +1,6 @@
 import type {
   AbaArtilharia,
+  AbaCartoes,
   AtletaArtilharia,
   AbaFreeFire,
   AbaGruposMataMata,
@@ -661,4 +662,48 @@ export function calcularMedalhas(aba: AbaMedalhas): ClassificacaoMedalhas {
     totalPodios: aba.podios.length,
     podiosLancados,
   }
+}
+
+export type LinhaCartoes = {
+  pos: number
+  nome: string
+  turma: string
+  categoria: string
+  amarelos: number
+  vermelhos: number
+  total: number
+}
+
+export function calcularCartoes(aba: AbaCartoes): LinhaCartoes[] {
+  const mapa = new Map<string, Omit<LinhaCartoes, 'pos' | 'amarelos' | 'vermelhos' | 'total'> & {
+    amarelos: number
+    vermelhos: number
+  }>()
+
+  for (const cartao of aba.cartoes) {
+    const chave = `${cartao.nome}|${cartao.turma}|${cartao.categoria}`
+    let linha = mapa.get(chave)
+    if (!linha) {
+      linha = {
+        nome: cartao.nome,
+        turma: cartao.turma,
+        categoria: cartao.categoria,
+        amarelos: 0,
+        vermelhos: 0,
+      }
+      mapa.set(chave, linha)
+    }
+    if (cartao.tipo === 'vermelho') linha.vermelhos += 1
+    else linha.amarelos += 1
+  }
+
+  return [...mapa.values()]
+    .map((linha) => ({ ...linha, total: linha.amarelos + linha.vermelhos }))
+    .sort(
+      (a, b) =>
+        b.vermelhos - a.vermelhos ||
+        b.amarelos - a.amarelos ||
+        a.nome.localeCompare(b.nome, 'pt-BR'),
+    )
+    .map((linha, index) => ({ pos: index + 1, ...linha }))
 }
