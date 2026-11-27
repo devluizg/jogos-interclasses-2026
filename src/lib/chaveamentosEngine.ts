@@ -176,7 +176,21 @@ export function resolverGruposMataMata(aba: AbaGruposMataMata): EliminatoriaGrup
   let sf2Eq1 = '1º Grupo B'
   let sf2Eq2 = '2º Grupo A'
 
-  if (aba.formatoEliminatoria === 'semis_2grupos') {
+  if (aba.formatoEliminatoria === 'semis_intragrupo') {
+    const tA = classificacoes['A'] ?? []
+    const tB = classificacoes['B'] ?? []
+    if (grupoCompleto['B'] && tB[0]) sf1Eq1 = tB[0].nome
+    if (grupoCompleto['B'] && tB[1]) sf1Eq2 = tB[1].nome
+    if (grupoCompleto['A'] && tA[0]) sf2Eq1 = tA[0].nome
+    if (grupoCompleto['A'] && tA[1]) sf2Eq2 = tA[1].nome
+  } else if (aba.formatoEliminatoria === 'semis_por_ranking') {
+    const tA = classificacoes['A'] ?? []
+    const tB = classificacoes['B'] ?? []
+    if (grupoCompleto['A'] && tA[0]) sf1Eq1 = tA[0].nome
+    if (grupoCompleto['B'] && tB[0]) sf1Eq2 = tB[0].nome
+    if (grupoCompleto['A'] && tA[1]) sf2Eq1 = tA[1].nome
+    if (grupoCompleto['B'] && tB[1]) sf2Eq2 = tB[1].nome
+  } else if (aba.formatoEliminatoria === 'semis_2grupos') {
     const tA = classificacoes['A'] ?? []
     const tB = classificacoes['B'] ?? []
     if (grupoCompleto['A'] && tA[0]) sf1Eq1 = tA[0].nome
@@ -197,13 +211,13 @@ export function resolverGruposMataMata(aba: AbaGruposMataMata): EliminatoriaGrup
     if (melhor2?.grupoId === 'A') {
       sf1Eq1 = lB
       sf1Eq2 = m2
-      sf2Eq1 = lA
-      sf2Eq2 = lC
+      sf2Eq1 = lC
+      sf2Eq2 = lA
     } else if (melhor2?.grupoId === 'B') {
       sf1Eq1 = lA
       sf1Eq2 = m2
-      sf2Eq1 = lB
-      sf2Eq2 = lC
+      sf2Eq1 = lC
+      sf2Eq2 = lB
     } else {
       sf1Eq1 = lA
       sf1Eq2 = m2
@@ -355,7 +369,7 @@ export function resolverBracket(aba: AbaMataMata | AbaRepescagem): {
       if (res.vencedor) winners.set(j.codigo, res.vencedor)
       if (res.perdedor) losers.set(j.codigo, res.perdedor)
 
-      const rotUp = `${j.rotulo} ${fase.nome}`.toUpperCase()
+      const rotUp = j.rotulo.toUpperCase()
       if (rotUp.includes('3º') || j.codigo === '3L') jogoTerceiro = item
       if (rotUp.includes('FINAL') && !rotUp.includes('OITAVAS') && !rotUp.includes('QUARTAS') && !rotUp.includes('SEMI') && !rotUp.includes('3º')) {
         jogoFinal = item

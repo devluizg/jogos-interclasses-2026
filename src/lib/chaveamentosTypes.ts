@@ -55,7 +55,7 @@ export type AbaGruposMataMata = {
   rotuloPro: string
   rotuloContra: string
   rotuloSaldo: string
-  formatoEliminatoria: 'final_direta' | 'semis_2grupos' | 'semis_3grupos'
+  formatoEliminatoria: 'final_direta' | 'semis_2grupos' | 'semis_3grupos' | 'semis_intragrupo' | 'semis_por_ranking'
   grupos: GrupoPlanilha[]
   eliminatoria: JogoEliminatoriaGrupo[]
 }
